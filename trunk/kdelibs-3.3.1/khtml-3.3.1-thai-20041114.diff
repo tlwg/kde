@@ -1,6 +1,73 @@
-diff -uNr kdelibs-3.3.1.org/khtml/khtml_factory.cpp kdelibs-3.3.1/khtml/khtml_factory.cpp
---- kdelibs-3.3.1.org/khtml/khtml_factory.cpp	2004-02-13 09:49:41.000000000 +0900
-+++ kdelibs-3.3.1/khtml/khtml_factory.cpp	2004-11-12 12:37:16.000000000 +0900
+Index: admin/acinclude.m4.in
+===================================================================
+RCS file: /home/kde/kde-common/admin/acinclude.m4.in,v
+retrieving revision 2.477
+diff -u -3 -p -r2.477 acinclude.m4.in
+--- admin/acinclude.m4.in	7 Nov 2004 11:33:26 -0000	2.477
++++ admin/acinclude.m4.in	14 Nov 2004 21:08:37 -0000
+@@ -5586,3 +5586,55 @@ if test "x$ac_cv_sys_large_files" != "xn
+ fi
+ 
+ ])
++
++AC_DEFUN([KDE_CHECK_LIBTHAI],
++[
++AC_MSG_CHECKING([if libthai should be compiled in])
++ AC_ARG_WITH(libthai,
++    AC_HELP_STRING(
++      [--with-libthai=yes],
++      [add Thai-language support from libthai library [default=no]]
++    ),
++   [ ac_libthai=$withval],
++   [ ac_libthai=no ]
++ )
++
++if test "$ac_libthai" != "no"; then
++  AC_CACHE_VAL(kde_link_libthai,
++  [
++  kde_ldflags_safe="$LDFLAGS"
++  kde_libs_safe="$LIBS"
++
++  LDFLAGS="$LDFLAGS $USER_LDFLAGS"
++  LIBS="-lthai"
++
++  AC_TRY_LINK([
++  #include <thai/thailib.h>
++  #include <thai/thbrk.h>
++  ],
++  [
++  thchar_t c = 'C';
++  int pos[1];
++  size_t n = 1;  
++  (void)th_brk(&c, pos, n);
++  ],
++  kde_link_libthai=yes,
++  kde_link_libthai=no
++  )
++
++  LDFLAGS=$kde_ldflags_safe
++  LIBS=$kde_libs_safe
++  ])
++
++  LIBTHAI=""
++  if test "$kde_link_libthai" = "no"; then
++     AC_MSG_ERROR([Can't find libthai.])
++  else
++     AC_DEFINE(HAVE_LIBTHAI, 1,
++     [Defined if you have libthai and want to have it compiled in])
++      LIBTHAI="-lthai"
++  fi
++  AC_SUBST(LIBTHAI)
++fi
++AC_MSG_RESULT($ac_libthai)
++])
+Index: khtml/khtml_factory.cpp
+===================================================================
+RCS file: /home/kde/kdelibs/khtml/khtml_factory.cpp,v
+retrieving revision 1.33
+diff -u -3 -p -r1.33 khtml_factory.cpp
+--- khtml/khtml_factory.cpp	13 Feb 2004 00:49:41 -0000	1.33
++++ khtml/khtml_factory.cpp	14 Nov 2004 21:08:37 -0000
 @@ -25,6 +25,7 @@
  #include "css/cssstyleselector.h"
  #include "html/html_imageimpl.h"
@@ -9,7 +76,7 @@ diff -uNr kdelibs-3.3.1.org/khtml/khtml_factory.cpp kdelibs-3.3.1/khtml/khtml_fa
  #include "misc/loader.h"
  
  #include <kinstance.h>
-@@ -94,6 +95,7 @@
+@@ -94,6 +95,7 @@ KHTMLFactory::~KHTMLFactory()
          khtml::CSSStyleSelector::clear();
          khtml::RenderStyle::cleanup();
          khtml::Cache::clear();
@@ -17,15 +84,48 @@ diff -uNr kdelibs-3.3.1.org/khtml/khtml_factory.cpp kdelibs-3.3.1/khtml/khtml_fa
      }
      else
          deref();
-diff -uNr kdelibs-3.3.1.org/khtml/rendering/break_lines.cpp kdelibs-3.3.1/khtml/rendering/break_lines.cpp
---- kdelibs-3.3.1.org/khtml/rendering/break_lines.cpp	2002-09-06 03:12:06.000000000 +0900
-+++ kdelibs-3.3.1/khtml/rendering/break_lines.cpp	2004-11-14 01:32:34.000000000 +0900
-@@ -1 +1,120 @@
+Index: khtml/Makefile.am
+===================================================================
+RCS file: /home/kde/kdelibs/khtml/Makefile.am,v
+retrieving revision 1.159
+diff -u -3 -p -r1.159 Makefile.am
+--- khtml/Makefile.am	21 Sep 2004 11:26:07 -0000	1.159
++++ khtml/Makefile.am	14 Nov 2004 21:08:37 -0000
+@@ -54,6 +54,7 @@ libkhtml_la_LIBADD = ./xml/libkhtmlxml.l
+ 	./rendering/libkhtmlrender.la ./css/libkhtmlcss.la \
+ 	./misc/libkhtmlmisc.la ecma/libkjs_html.la ./dom/libkhtmldom.la $(LIBKJAVA) \
+ 	$(LIB_KPARTS) \
++	$(LIBTHAI) \
+ 	$(top_builddir)/kdeprint/libkdeprint.la  \
+ 	$(top_builddir)/kutils/libkutils.la \
+ 	$(top_builddir)/kwallet/client/libkwalletclient.la
+Index: khtml/configure.in.in
+===================================================================
+RCS file: /home/kde/kdelibs/khtml/configure.in.in,v
+retrieving revision 1.4
+diff -u -3 -p -r1.4 configure.in.in
+--- khtml/configure.in.in	23 May 2002 14:13:55 -0000	1.4
++++ khtml/configure.in.in	14 Nov 2004 21:08:37 -0000
+@@ -1,2 +1,4 @@
+ AM_CONDITIONAL(DOJAVA, test "x$kde_use_qt_emb" != "xyes")
++KDE_CHECK_LIBTHAI
++
+ 
+Index: khtml/rendering/break_lines.cpp
+===================================================================
+RCS file: /home/kde/kdelibs/khtml/rendering/break_lines.cpp,v
+retrieving revision 1.5
+diff -u -3 -p -r1.5 break_lines.cpp
+--- khtml/rendering/break_lines.cpp	5 Sep 2002 18:12:06 -0000	1.5
++++ khtml/rendering/break_lines.cpp	14 Nov 2004 21:08:37 -0000
+@@ -1 +1,122 @@
  #include <break_lines.h>
 +#include <klibloader.h>
 +#include "qcstring.h"
 +#include <qtextcodec.h>
 +#include <qcleanuphandler.h>
++#include <config.h>
++
 +
 +/* If HAVE_LIBTHAI is defined, libkhtml will link against 
 + * libthai since compile time. Otherwise it will try to 
@@ -141,10 +241,14 @@ diff -uNr kdelibs-3.3.1.org/khtml/rendering/break_lines.cpp kdelibs-3.3.1/khtml/
 +	return cache->isbreakable[pos];
 +    }
 +}
-diff -uNr kdelibs-3.3.1.org/khtml/rendering/break_lines.h kdelibs-3.3.1/khtml/rendering/break_lines.h
---- kdelibs-3.3.1.org/khtml/rendering/break_lines.h	2004-03-04 18:04:53.000000000 +0900
-+++ kdelibs-3.3.1/khtml/rendering/break_lines.h	2004-11-12 12:37:16.000000000 +0900
-@@ -116,7 +116,10 @@
+Index: khtml/rendering/break_lines.h
+===================================================================
+RCS file: /home/kde/kdelibs/khtml/rendering/break_lines.h,v
+retrieving revision 1.6
+diff -u -3 -p -r1.6 break_lines.h
+--- khtml/rendering/break_lines.h	4 Mar 2004 09:04:53 -0000	1.6
++++ khtml/rendering/break_lines.h	14 Nov 2004 21:08:37 -0000
+@@ -116,7 +116,10 @@ namespace khtml {
          }
      }
      
@@ -156,7 +260,7 @@ diff -uNr kdelibs-3.3.1.org/khtml/rendering/break_lines.h kdelibs-3.3.1/khtml/re
      {
  	const QChar *c = str+pos;
  	unsigned short ch = c->unicode();
-@@ -126,9 +129,8 @@
+@@ -126,9 +129,8 @@ namespace khtml {
  	    if ( row == 0x0e ) {
  		// 0e00 - 0e7f == Thai
  		if ( c->cell() < 0x80 ) {
