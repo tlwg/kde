@@ -21,6 +21,7 @@ namespace khtml {
         }
         ~ThaiCache() {
             free(wbrpos);
+            free(isbreakable);
             library->unload();
         }
         const QChar *string;
