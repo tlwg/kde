@@ -2,11 +2,6 @@
 #define BREAK_LINES_H
 
 #include <qstring.h>
-// use for thai word break
-#include <dlfcn.h>
-#include <stdio.h>
-#include "qcstring.h"
-#include <qtextcodec.h>
 
 namespace khtml {
 
@@ -121,68 +116,9 @@ namespace khtml {
         }
     }
     
-    static bool isBreakableThai( const QChar *string, const int pos, const int len) {
-      static QChar *oldString = 0;
-      static QCString *thaiCache;
-      static QTextCodec *thaiCodec = QTextCodec::codecForMib(2259);
-#define MAXWBRPOS 32000
-      static int wbrpos[MAXWBRPOS];
-      static unsigned int numwbrpos = 0;
-      
-      // for libthai
-      const char *error;
-      static void *module;
-      typedef int (*th_brk_def)(const char*, int[], int);
-      static th_brk_def th_brk;
-	
-      /* load libthai dynamically */
-      if ( ! th_brk) {
-	module = dlopen("libthai.so.0", RTLD_LAZY);
-	if (!module) {
-	  //fprintf(stderr,"Warning: couldn't open libthai.so: %s, thai word break feature disabled\n", dlerror());
-	  // no wordcut library, break anywhere is ok
-	  return true;
-	} else {
-	  dlerror();
-	  th_brk = (th_brk_def) dlsym(module, "th_brk");
-	  if ((error = dlerror())) {
-	    //fprintf(stderr, "Warning: couldn't find libthai: %s\n",error);
-	    //fprintf(stderr, ", thai word break feature disabled\n");
-	    // no working wordcut library, break anywhere is ok
-	    return true;
-	  }
-	}
-      }
-      
-      // build up string of thai chars
-      if ( string != oldString ) {
-	//fprintf(stderr,"new string found (not in cache), calling libthai\n");
-	thaiCache = new QCString;
-	*thaiCache = thaiCodec->fromUnicode( *(new QString(string,len)));
-	//printf("About to call libthai::th_brk with str: %s, pos: %d",thaiCache->data(),pos);
-	
-	numwbrpos = (*th_brk)( thaiCache->data(), wbrpos, MAXWBRPOS);
-	//fprintf(stderr,"libthai returns with value %d\n",numwbrpos);
-	
-	//dlclose(module);
-      } else {
-	//fprintf(stderr,"old string found in the cache, not call libthai\n");
-      }
-      oldString = (QChar*) string;
-      
-      if ( numwbrpos > 0 ) {
-	for (unsigned int i = numwbrpos; i > 0;i--) {
-	  if ( ( wbrpos[i-1]) == pos ) {
-	    //printf("wbrpos[%d] is %d, return: true\n",i-1,pos);
-	    return true;
-	  } else {
-	    //printf("wbrpos[%d] is %d\n",i-1, wbrpos[i-1]);
-	  }
-	}
-      }
-      return false;
-    }
-    
+    bool isBreakableThai( const QChar *string, const int pos, const int len);
+    void cleanup_thaibreaks();
+
     inline bool isBreakable( const QChar *str, const int pos, int len )
     {
 	const QChar *c = str+pos;
