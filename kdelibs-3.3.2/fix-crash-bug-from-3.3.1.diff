@@ -1,0 +1,137 @@
+diff -uNr khtml-previous-patch/khtml_factory.cpp khtml/khtml_factory.cpp
+--- khtml-previous-patch/khtml_factory.cpp	2005-02-25 14:06:40.000000000 +0900
++++ khtml/khtml_factory.cpp	2005-02-25 14:08:34.000000000 +0900
+@@ -125,6 +125,7 @@
+         // (Simon)
+         s_self = new KHTMLFactory;
+         khtml::Cache::init();
++	khtml::init_thaibreaks();
+     }
+ 
+     s_refcnt++;
+diff -uNr khtml-previous-patch/rendering/break_lines.cpp khtml/rendering/break_lines.cpp
+--- khtml-previous-patch/rendering/break_lines.cpp	2005-02-25 14:06:40.000000000 +0900
++++ khtml/rendering/break_lines.cpp	2005-02-25 14:10:29.000000000 +0900
+@@ -13,14 +13,16 @@
+  * Ott Pattara Nov 14, 2004
+  */
+ 
+-#ifndef HAVE_LIBTHAI
+-typedef int (*th_brk_def)(const unsigned char*, int[], int);
+-static th_brk_def th_brk;
+-#else
++#ifdef HAVE_LIBTHAI
+ #include <thai/thailib.h>
+ #include <thai/thbrk.h>
+ #endif
+ 
++#ifndef HAVE_LIBTHAI
++    typedef int (*th_brk_def)(const unsigned char*, int[], int);
++    static th_brk_def th_brk = 0;
++#endif
++
+ namespace khtml {
+     struct ThaiCache
+     {
+@@ -46,57 +48,54 @@
+         KLibrary *library;
+     };
+     static ThaiCache *cache = 0;
++    static QTextCodec *thaiCodec = 0;
+ 
+-    void cleanup_thaibreaks()
+-    {
+-        delete cache;
+-    }
+-
+-    bool isBreakableThai( const QChar *string, const int pos, const int len)
++    void init_thaibreaks()
+     {
+-        static QTextCodec *thaiCodec = QTextCodec::codecForMib(2259);
+-	//printf("Entering isBreakableThai with pos = %d\n", pos);
++        cache = new ThaiCache;
++        thaiCodec = QTextCodec::codecForMib(2259);
+ 
+ #ifndef HAVE_LIBTHAI
+-	
+-	KLibrary *lib = 0;
++        KLibrary *lib = 0;
+ 
+         /* load libthai dynamically */
+-	if (( !th_brk ) && thaiCodec  ) {
+-	    printf("Try to load libthai dynamically...\n");
++        if (( !th_brk ) && thaiCodec  ) {
++            printf("Try to load libthai dynamically...\n");
+             KLibLoader *loader = KLibLoader::self();
+             lib = loader->library("libthai");
+             if (lib && lib->hasSymbol("th_brk")) {
+                 th_brk = (th_brk_def) lib->symbol("th_brk");
+             } else {
+                 // indication that loading failed and we shouldn't try to load again
+-		printf("Error, can't load libthai...\n");
++                printf("Error, can't load libthai...\n");
+                 thaiCodec = 0;
+                 if (lib)
+                     lib->unload();
+             }
+         }
++        cache->library = lib;
++#endif
++    }
+ 
+-        if (!th_brk ) {
++    void cleanup_thaibreaks()
++    {
++        delete cache;
++    }
++
++    bool isBreakableThai( const QChar *string, const int pos, const int len)
++    {
++        if (!thaiCodec || !th_brk ) {
+             return true;
+         }
+-#endif
+-
+-	if (!cache ) {
+-            cache = new ThaiCache;
+-#ifndef HAVE_LIBTHAI
+-            cache->library = lib;
+-#endif
+-	}
+ 
+         // build up string of thai chars
+         if ( string != cache->string ) {
+-            //fprintf(stderr,"new string found (not in cache), calling libthai\n");
++            //fprintf(fp,"new string found (not in cache), calling libthai\n");
+             QCString cstr = thaiCodec->fromUnicode( QConstString(string,len).string());
+-            //printf("About to call libthai::th_brk with str: %s",cstr.data());
++            //fprintf(fp, "About to call libthai::th_brk with str: %s",cstr.data());
+ 
+             cache->numwbrpos = th_brk((const unsigned char*) cstr.data(), cache->wbrpos, cache->allocated);
+-            //fprintf(stderr,"libthai returns with value %d\n",cache->numwbrpos);
++            //fprintf(fp,"libthai returns with value %d\n",cache->numwbrpos);
+             if (cache->numwbrpos > cache->allocated) {
+                 cache->allocated = cache->numwbrpos;
+                 cache->wbrpos = (int *)realloc(cache->wbrpos, cache->allocated*sizeof(int));
+@@ -116,7 +115,9 @@
+ 	    }
+             cache->string = string;
+         }
+-	//printf("Returning %d\n", cache->isbreakable[pos]);
++	//fprintf(fp, "Returning %d\n", cache->isbreakable[pos]);
++        //fclose(fp);
++
+ 	return cache->isbreakable[pos];
+     }
+ }
+diff -uNr khtml-previous-patch/rendering/break_lines.h khtml/rendering/break_lines.h
+--- khtml-previous-patch/rendering/break_lines.h	2005-02-25 14:06:40.000000000 +0900
++++ khtml/rendering/break_lines.h	2005-02-25 14:09:25.000000000 +0900
+@@ -117,6 +117,7 @@
+     }
+     
+     bool isBreakableThai( const QChar *string, const int pos, const int len);
++    void init_thaibreaks();
+     void cleanup_thaibreaks();
+ 
+     inline bool isBreakable( const QChar *str, const int pos, int len )

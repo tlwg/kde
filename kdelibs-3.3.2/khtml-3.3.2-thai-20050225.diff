@@ -1,0 +1,264 @@
+Index: admin/acinclude.m4.in
+===================================================================
+RCS file: /home/kde/kde-common/admin/acinclude.m4.in,v
+retrieving revision 2.477
+diff -u -3 -p -r2.477 acinclude.m4.in
+--- admin/acinclude.m4.in	7 Nov 2004 11:33:26 -0000	2.477
++++ admin/acinclude.m4.in	14 Nov 2004 21:08:37 -0000
+@@ -5586,3 +5586,55 @@ if test "x$ac_cv_sys_large_files" != "xn
+ fi
+ 
+ ])
++
++AC_DEFUN([KDE_CHECK_LIBTHAI],
++[
++AC_MSG_CHECKING([if libthai should be compiled in])
++ AC_ARG_WITH(libthai,
++    AC_HELP_STRING(
++      [--with-libthai=yes],
++      [add Thai-language support from libthai library [default=no]]
++    ),
++   [ ac_libthai=$withval],
++   [ ac_libthai=no ]
++ )
++
++if test "$ac_libthai" != "no"; then
++  AC_CACHE_VAL(kde_link_libthai,
++  [
++  kde_ldflags_safe="$LDFLAGS"
++  kde_libs_safe="$LIBS"
++
++  LDFLAGS="$LDFLAGS $USER_LDFLAGS"
++  LIBS="-lthai"
++
++  AC_TRY_LINK([
++  #include <thai/thailib.h>
++  #include <thai/thbrk.h>
++  ],
++  [
++  thchar_t c = 'C';
++  int pos[1];
++  size_t n = 1;  
++  (void)th_brk(&c, pos, n);
++  ],
++  kde_link_libthai=yes,
++  kde_link_libthai=no
++  )
++
++  LDFLAGS=$kde_ldflags_safe
++  LIBS=$kde_libs_safe
++  ])
++
++  LIBTHAI=""
++  if test "$kde_link_libthai" = "no"; then
++     AC_MSG_ERROR([Can't find libthai.])
++  else
++     AC_DEFINE(HAVE_LIBTHAI, 1,
++     [Defined if you have libthai and want to have it compiled in])
++      LIBTHAI="-lthai"
++  fi
++  AC_SUBST(LIBTHAI)
++fi
++AC_MSG_RESULT($ac_libthai)
++])
+diff -uNr khtml.org/Makefile.am khtml/Makefile.am
+--- khtml.org/Makefile.am	2004-11-29 02:30:49.000000000 +0900
++++ khtml/Makefile.am	2005-02-25 14:07:35.000000000 +0900
+@@ -54,6 +54,7 @@
+ 	./rendering/libkhtmlrender.la ./css/libkhtmlcss.la \
+ 	./misc/libkhtmlmisc.la ecma/libkjs_html.la ./dom/libkhtmldom.la $(LIBKJAVA) \
+ 	$(LIB_KPARTS) \
++	$(LIBTHAI) \
+ 	$(top_builddir)/kdeprint/libkdeprint.la  \
+ 	$(top_builddir)/kutils/libkutils.la \
+ 	$(top_builddir)/kwallet/client/libkwalletclient.la
+diff -uNr khtml.org/configure.in.in khtml/configure.in.in
+--- khtml.org/configure.in.in	2003-08-15 21:14:58.000000000 +0900
++++ khtml/configure.in.in	2005-02-25 14:07:35.000000000 +0900
+@@ -1,2 +1,4 @@
+ AM_CONDITIONAL(DOJAVA, test "x$kde_use_qt_emb" != "xyes")
++KDE_CHECK_LIBTHAI
++
+ 
+diff -uNr khtml.org/khtml_factory.cpp khtml/khtml_factory.cpp
+--- khtml.org/khtml_factory.cpp	2004-05-23 05:55:32.000000000 +0900
++++ khtml/khtml_factory.cpp	2005-02-25 14:08:34.000000000 +0900
+@@ -25,6 +25,7 @@
+ #include "css/cssstyleselector.h"
+ #include "html/html_imageimpl.h"
+ #include "rendering/render_style.h"
++#include "rendering/break_lines.h"
+ #include "misc/loader.h"
+ 
+ #include <kinstance.h>
+@@ -94,6 +95,7 @@
+         khtml::CSSStyleSelector::clear();
+         khtml::RenderStyle::cleanup();
+         khtml::Cache::clear();
++        khtml::cleanup_thaibreaks();
+     }
+     else
+         deref();
+@@ -123,6 +125,7 @@
+         // (Simon)
+         s_self = new KHTMLFactory;
+         khtml::Cache::init();
++	khtml::init_thaibreaks();
+     }
+ 
+     s_refcnt++;
+diff -uNr khtml.org/rendering/break_lines.cpp khtml/rendering/break_lines.cpp
+--- khtml.org/rendering/break_lines.cpp	2002-09-06 23:29:41.000000000 +0900
++++ khtml/rendering/break_lines.cpp	2005-02-25 14:10:29.000000000 +0900
+@@ -1 +1,123 @@
+ #include <break_lines.h>
++#include <klibloader.h>
++#include "qcstring.h"
++#include <qtextcodec.h>
++#include <qcleanuphandler.h>
++#include <config.h>
++
++
++/* If HAVE_LIBTHAI is defined, libkhtml will link against 
++ * libthai since compile time. Otherwise it will try to 
++ * dlopen at run-time
++ *
++ * Ott Pattara Nov 14, 2004
++ */
++
++#ifdef HAVE_LIBTHAI
++#include <thai/thailib.h>
++#include <thai/thbrk.h>
++#endif
++
++#ifndef HAVE_LIBTHAI
++    typedef int (*th_brk_def)(const unsigned char*, int[], int);
++    static th_brk_def th_brk = 0;
++#endif
++
++namespace khtml {
++    struct ThaiCache
++    {
++        ThaiCache() {
++            string = 0;
++            allocated = 0x400;
++            wbrpos = (int *) malloc(allocated*sizeof(int));
++            numwbrpos = 0;
++            numisbreakable = 0x400;
++            isbreakable = (int *) malloc(numisbreakable*sizeof(int));
++	    library = 0;
++        }
++        ~ThaiCache() {
++            free(wbrpos);
++            free(isbreakable);
++            if (library) library->unload();
++        }
++        const QChar *string;
++        int *wbrpos;
++        int *isbreakable;
++        int allocated;
++        int numwbrpos,numisbreakable;
++        KLibrary *library;
++    };
++    static ThaiCache *cache = 0;
++    static QTextCodec *thaiCodec = 0;
++
++    void init_thaibreaks()
++    {
++        cache = new ThaiCache;
++        thaiCodec = QTextCodec::codecForMib(2259);
++
++#ifndef HAVE_LIBTHAI
++        KLibrary *lib = 0;
++
++        /* load libthai dynamically */
++        if (( !th_brk ) && thaiCodec  ) {
++            printf("Try to load libthai dynamically...\n");
++            KLibLoader *loader = KLibLoader::self();
++            lib = loader->library("libthai");
++            if (lib && lib->hasSymbol("th_brk")) {
++                th_brk = (th_brk_def) lib->symbol("th_brk");
++            } else {
++                // indication that loading failed and we shouldn't try to load again
++                printf("Error, can't load libthai...\n");
++                thaiCodec = 0;
++                if (lib)
++                    lib->unload();
++            }
++        }
++        cache->library = lib;
++#endif
++    }
++
++    void cleanup_thaibreaks()
++    {
++        delete cache;
++    }
++
++    bool isBreakableThai( const QChar *string, const int pos, const int len)
++    {
++        if (!thaiCodec || !th_brk ) {
++            return true;
++        }
++
++        // build up string of thai chars
++        if ( string != cache->string ) {
++            //fprintf(fp,"new string found (not in cache), calling libthai\n");
++            QCString cstr = thaiCodec->fromUnicode( QConstString(string,len).string());
++            //fprintf(fp, "About to call libthai::th_brk with str: %s",cstr.data());
++
++            cache->numwbrpos = th_brk((const unsigned char*) cstr.data(), cache->wbrpos, cache->allocated);
++            //fprintf(fp,"libthai returns with value %d\n",cache->numwbrpos);
++            if (cache->numwbrpos > cache->allocated) {
++                cache->allocated = cache->numwbrpos;
++                cache->wbrpos = (int *)realloc(cache->wbrpos, cache->allocated*sizeof(int));
++                cache->numwbrpos = th_brk((const unsigned char*) cstr.data(), cache->wbrpos, cache->allocated);
++            }
++	    if ( len > cache->numisbreakable ) {
++		cache->numisbreakable=len;
++                cache->isbreakable = (int *)realloc(cache->isbreakable, cache->numisbreakable*sizeof(int));
++	    }
++	    for (int i = 0 ; i < len ; ++i) {
++		cache->isbreakable[i] = 0;
++	    }
++            if ( cache->numwbrpos > 0 ) {
++            	for (int i = cache->numwbrpos-1; i >= 0; --i) {
++                	cache->isbreakable[cache->wbrpos[i]] = 1;
++		}
++	    }
++            cache->string = string;
++        }
++	//fprintf(fp, "Returning %d\n", cache->isbreakable[pos]);
++        //fclose(fp);
++
++	return cache->isbreakable[pos];
++    }
++}
+diff -uNr khtml.org/rendering/break_lines.h khtml/rendering/break_lines.h
+--- khtml.org/rendering/break_lines.h	2004-05-23 05:55:38.000000000 +0900
++++ khtml/rendering/break_lines.h	2005-02-25 14:09:25.000000000 +0900
+@@ -116,7 +116,11 @@
+         }
+     }
+     
+-    inline bool isBreakable( const QChar *str, const int pos, int /*len*/ )
++    bool isBreakableThai( const QChar *string, const int pos, const int len);
++    void init_thaibreaks();
++    void cleanup_thaibreaks();
++
++    inline bool isBreakable( const QChar *str, const int pos, int len )
+     {
+ 	const QChar *c = str+pos;
+ 	unsigned short ch = c->unicode();
+@@ -126,9 +130,8 @@
+ 	    if ( row == 0x0e ) {
+ 		// 0e00 - 0e7f == Thai
+ 		if ( c->cell() < 0x80 ) {
+-		    // we don't a have a thai line breaking lib at the moment, allow
+-		    // breaks everywhere except directly before punctuation.
+-		    return true;
++		    // consult libthai
++		    return isBreakableThai(str, pos, len);
+ 		} else
+ 		    return false;
+ 	    }
