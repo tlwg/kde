@@ -1,0 +1,13 @@
+--- break_lines.cpp.org	2005-03-30 20:08:57.000000000 +0900
++++ break_lines.cpp	2005-03-30 20:09:48.000000000 +0900
+@@ -50,6 +50,10 @@
+     void cleanup_thaibreaks()
+     {
+         delete cache;
++	cache = 0;
++#ifndef HAVE_LIBTHAI
++	th_brk = 0;
++#endif
+     }
+ 
+     bool isBreakableThai( const QChar *string, const int pos, const int len)
