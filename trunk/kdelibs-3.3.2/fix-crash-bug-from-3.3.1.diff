@@ -10,12 +10,14 @@ diff -uNr khtml-oldpatch/rendering/break_lines.cpp khtml/rendering/break_lines.c
  #else
  #include <thai/thailib.h>
  #include <thai/thbrk.h>
-@@ -50,6 +50,8 @@
+@@ -50,6 +50,10 @@
      void cleanup_thaibreaks()
      {
          delete cache;
 +	cache = 0;
++#ifndef HAVE_LIBTHAI
 +	th_brk = 0;
++#endif
      }
  
      bool isBreakableThai( const QChar *string, const int pos, const int len)
