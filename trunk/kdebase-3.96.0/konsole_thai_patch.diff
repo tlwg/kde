@@ -1,0 +1,169 @@
+diff -uNr kdebase-3.96.0.org/apps/konsole/src/Screen.cpp kdebase-3.96.0/apps/konsole/src/Screen.cpp
+--- kdebase-3.96.0.org/apps/konsole/src/Screen.cpp	2007-10-03 18:02:19.000000000 +0700
++++ kdebase-3.96.0/apps/konsole/src/Screen.cpp	2007-12-04 11:02:24.000000000 +0700
+@@ -725,8 +725,42 @@
+ 
+   int w = konsole_wcwidth(c);
+ 
+-  if (w <= 0)
+-     return;
++  if (w == 0 && cuX == 0)
++    w = 1;
++
++  //Set CharSequence
++  ushort u_char_combind[5];
++
++  if (w == 0 && cuX > 0) {
++    if (screenLines[cuY][cuX-1].rendition & RE_EXTENDED_CHAR)
++    {
++        // sequence of characters
++        ushort extendedCharLength = 0;
++        ushort* chars = ExtendedCharTable::instance
++                            .lookupExtendedChar(screenLines[cuY][cuX-1].charSequence,extendedCharLength);
++        if (extendedCharLength > 5)
++            return;
++        for ( int index = 0 ; index < extendedCharLength ; index++ )            
++            u_char_combind[index] = chars[index];
++
++        u_char_combind[extendedCharLength] = c;
++        Character& th_char = screenLines[cuY][cuX-1];
++        th_char.charSequence = ExtendedCharTable::instance.createExtendedChar(u_char_combind    ,extendedCharLength+1);
++    }
++    else
++    {
++        Character& th_char = screenLines[cuY][cuX-1];
++        
++        th_char.rendition |= RE_EXTENDED_CHAR;
++        u_char_combind[0] = (ushort)screenLines[cuY][cuX-1].character;
++        u_char_combind[1] = c;        
++        th_char.charSequence = ExtendedCharTable::instance.createExtendedChar(u_char_combind    ,2); 
++    }
++    return;            
++  }
++  
++//  if (w <= 0)
++//     return;
+ 
+   if (cuX+w > columns) {
+     if (getMode(MODE_Wrap)) {
+diff -uNr kdebase-3.96.0.org/apps/konsole/src/TerminalCharacterDecoder.cpp kdebase-3.96.0/apps/konsole/src/TerminalCharacterDecoder.cpp
+--- kdebase-3.96.0.org/apps/konsole/src/TerminalCharacterDecoder.cpp	2007-06-27 17:44:03.000000000 +0700
++++ kdebase-3.96.0/apps/konsole/src/TerminalCharacterDecoder.cpp	2007-12-04 11:11:12.000000000 +0700
+@@ -80,10 +80,20 @@
+         }
+     }
+ 
+-	for (int i=0;i<outputCount;i++)
+-	{
+-		plainText.append( QChar(characters[i].character) );
+-	}
++    for (int i=0;i<outputCount;i++)
++    {
++        if (characters[i].rendition & RE_EXTENDED_CHAR) 
++        { 
++            ushort extendedCharLength = 0;
++            ushort* chars = ExtendedCharTable::instance 
++                            .lookupExtendedChar(characters[i].charSequence,extendedCharLength);
++
++            for (int j = 0;j<extendedCharLength;j++) 
++               plainText.append(QChar(chars[j]));
++         
++        } else
++            plainText.append( QChar(characters[i].character) );
++    }
+ 
+ 	*_output << plainText;
+ }
+diff -uNr kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp kdebase-3.96.0/apps/konsole/src/TerminalDisplay.cpp
+--- kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp	2007-10-08 14:16:58.000000000 +0700
++++ kdebase-3.96.0/apps/konsole/src/TerminalDisplay.cpp	2007-12-04 15:12:34.000000000 +0700
+@@ -632,10 +632,23 @@
+     // draw text
+     if ( isLineCharString(text) )
+ 	  	drawLineCharString(painter,rect.x(),rect.y(),text,style);
++    else if ( style->rendition & RE_EXTENDED_CHAR )     //draw CharSequence
++        drawCharSequence(painter,rect,text,style);
+     else
+         painter.drawText(rect,text);
+ }
+ 
++void TerminalDisplay::drawCharSequence(   QPainter& painter,const QRect& rect, const QString& str, 
++                                    const Character* attributes)
++{ 
++    painter.drawText(rect,str[0]);
++    Qt::BGMode bgMode = painter.backgroundMode();
++    painter.setBackgroundMode(Qt::TransparentMode);
++    for (int i = 1; i < str.length(); i++)
++        painter.drawText(rect,str[i]);
++    painter.setBackgroundMode(bgMode);
++}
++
+ void TerminalDisplay::drawTextFragment(QPainter& painter , 
+                                        const QRect& rect,
+                                        const QString& text, 
+@@ -1229,6 +1242,7 @@
+              _image[loc(x+len,y)].foregroundColor == currentForeground &&
+              _image[loc(x+len,y)].backgroundColor == currentBackground &&
+              _image[loc(x+len,y)].rendition == currentRendition &&
++             _image[loc(x+len,y)].rendition & ~RE_EXTENDED_CHAR &&  //No CharSequence
+              (_image[ qMin(loc(x+len,y)+1,_imageSize) ].character == 0) == doubleWidth &&
+              isLineChar( c = _image[loc(x+len,y)].character) == lineDraw) // Assignment!
+       {
+@@ -2314,19 +2328,34 @@
+                 return font();
+             break;
+         case Qt::ImCursorPosition:
++            {
++                Character *chars = &_image[loc(0,cursorPos.y())];
++                int tmp_count = 0;
++                for (int i = 0;i < cursorPos.x();i++)
++                {
++                    if (chars[i].rendition & RE_EXTENDED_CHAR)
++                    {
++                        ushort extendedCharLength = 0;
++                        ushort* chars_t = ExtendedCharTable::instance 
++                            .lookupExtendedChar(chars[i].charSequence,extendedCharLength);
++                        tmp_count += extendedCharLength-1;
++                    }
++                }
+                 // return the cursor position within the current line
+-                return cursorPos.x();
++                return cursorPos.x() + tmp_count;
++            }
+             break;
+         case Qt::ImSurroundingText:
+-            {
++            {   
++                return QString(QString::null);
+                 // return the text from the current line
+-                QString lineText;
+-                QTextStream stream(&lineText);
+-                PlainTextDecoder decoder;
+-                decoder.begin(&stream);
+-                decoder.decodeLine(&_image[loc(0,cursorPos.y())],_usedColumns,_lineProperties[cursorPos.y()]);
+-                decoder.end();
+-                return lineText;
++//                 QString lineText;
++//                 QTextStream stream(&lineText);
++//                 PlainTextDecoder decoder;
++//                 decoder.begin(&stream);
++//                 decoder.decodeLine(&_image[loc(0,cursorPos.y())],_usedColumns,_lineProperties[cursorPos.y()]);
++//                 decoder.end();
++//                 return lineText;
+             }
+             break;
+         case Qt::ImCurrentSelection:
+diff -uNr kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.h kdebase-3.96.0/apps/konsole/src/TerminalDisplay.h
+--- kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.h	2007-10-03 18:02:19.000000000 +0700
++++ kdebase-3.96.0/apps/konsole/src/TerminalDisplay.h	2007-12-04 15:14:06.000000000 +0700
+@@ -551,6 +551,10 @@
+     // draws the characters or line graphics in a text fragment
+     void drawCharacters(QPainter& painter, const QRect& rect,  const QString& text, 
+                                            const Character* style, bool invertCharacterColor);
++    // draws the charSequence 
++    void drawCharSequence(QPainter& painter, const QRect& rect, 
++                          const QString& str, const Character* attributes);
++
+     // draws a string of line graphics
+ 	void drawLineCharString(QPainter& painter, int x, int y, 
+                             const QString& str, const Character* attributes);
