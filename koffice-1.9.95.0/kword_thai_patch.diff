@@ -1,0 +1,36 @@
+diff -uNr koffice-1.9.95.org/shapes/text/TextTool.cpp koffice-1.9.95/shapes/text/TextTool.cpp
+--- koffice-1.9.95.org/shapes/text/TextTool.cpp	2007-11-15 07:50:18.000000000 +0700
++++ koffice-1.9.95/shapes/text/TextTool.cpp	2007-12-07 17:44:55.000000000 +0700
+@@ -902,6 +902,20 @@
+     return QVariant();
+ }
+ 
++void TextTool::inputMethodEvent (QInputMethodEvent * event) {
++    if (event->replacementLength() > 0) {
++        m_caret.setPosition(m_caret.position() + event->replacementStart());
++        for (int i = event->replacementLength(); i > 0; --i) {
++            m_caret.deleteChar();
++        }
++    }
++    if(! event->commitString().isEmpty()) {
++        QKeyEvent ke(QEvent::KeyPress, -1, 0, event->commitString());
++        keyPressEvent(&ke);
++    }
++    event->accept();
++}
++
+ void TextTool::ensureCursorVisible() {
+     if(m_textShapeData->endPosition() < m_caret.position() || m_textShapeData->position() > m_caret.position()) {
+         KoTextDocumentLayout *lay = dynamic_cast<KoTextDocumentLayout*> (m_textShapeData->document()->documentLayout());
+diff -uNr koffice-1.9.95.org/shapes/text/TextTool.h koffice-1.9.95/shapes/text/TextTool.h
+--- koffice-1.9.95.org/shapes/text/TextTool.h	2007-11-06 15:03:42.000000000 +0700
++++ koffice-1.9.95/shapes/text/TextTool.h	2007-12-07 17:47:58.000000000 +0700
+@@ -86,6 +86,8 @@
+     virtual QWidget *createOptionWidget();
+     /// reimplemented from superclass
+     virtual QVariant inputMethodQuery(Qt::InputMethodQuery query, const KoViewConverter &converter) const;
++    /// reimplemented from superclass
++    virtual void inputMethodEvent(QInputMethodEvent * event);
+ 
+     void startTextEditingPlugin(const QString &pluginId);
+ 
