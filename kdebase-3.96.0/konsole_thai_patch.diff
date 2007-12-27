@@ -1,12 +1,13 @@
-diff -uNr kdebase-3.96.0.org/apps/konsole/src/Screen.cpp kdebase-3.96.0/apps/konsole/src/Screen.cpp
---- kdebase-3.96.0.org/apps/konsole/src/Screen.cpp	2007-10-03 18:02:19.000000000 +0700
-+++ kdebase-3.96.0/apps/konsole/src/Screen.cpp	2007-12-04 11:02:24.000000000 +0700
-@@ -725,8 +725,42 @@
+diff -uNr ./kdebase-3.96.0.org/apps/konsole/src/Screen.cpp ./kdebase-3.96.0/apps/konsole/src/Screen.cpp
+--- ./kdebase-3.96.0.org/apps/konsole/src/Screen.cpp	2007-10-03 18:02:19.000000000 +0700
++++ ./kdebase-3.96.0/apps/konsole/src/Screen.cpp	2007-12-27 15:35:30.000000000 +0700
+@@ -725,8 +725,43 @@
  
    int w = konsole_wcwidth(c);
  
 -  if (w <= 0)
 -     return;
++  // force combining character at column 0 to always take the first cell
 +  if (w == 0 && cuX == 0)
 +    w = 1;
 +
@@ -46,9 +47,9 @@ diff -uNr kdebase-3.96.0.org/apps/konsole/src/Screen.cpp kdebase-3.96.0/apps/kon
  
    if (cuX+w > columns) {
      if (getMode(MODE_Wrap)) {
-diff -uNr kdebase-3.96.0.org/apps/konsole/src/TerminalCharacterDecoder.cpp kdebase-3.96.0/apps/konsole/src/TerminalCharacterDecoder.cpp
---- kdebase-3.96.0.org/apps/konsole/src/TerminalCharacterDecoder.cpp	2007-06-27 17:44:03.000000000 +0700
-+++ kdebase-3.96.0/apps/konsole/src/TerminalCharacterDecoder.cpp	2007-12-04 11:11:12.000000000 +0700
+diff -uNr ./kdebase-3.96.0.org/apps/konsole/src/TerminalCharacterDecoder.cpp ./kdebase-3.96.0/apps/konsole/src/TerminalCharacterDecoder.cpp
+--- ./kdebase-3.96.0.org/apps/konsole/src/TerminalCharacterDecoder.cpp	2007-06-27 17:44:03.000000000 +0700
++++ ./kdebase-3.96.0/apps/konsole/src/TerminalCharacterDecoder.cpp	2007-12-27 15:41:02.000000000 +0700
 @@ -80,10 +80,20 @@
          }
      }
@@ -74,9 +75,9 @@ diff -uNr kdebase-3.96.0.org/apps/konsole/src/TerminalCharacterDecoder.cpp kdeba
  
  	*_output << plainText;
  }
-diff -uNr kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp kdebase-3.96.0/apps/konsole/src/TerminalDisplay.cpp
---- kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp	2007-10-08 14:16:58.000000000 +0700
-+++ kdebase-3.96.0/apps/konsole/src/TerminalDisplay.cpp	2007-12-04 15:12:34.000000000 +0700
+diff -uNr ./kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp ./kdebase-3.96.0/apps/konsole/src/TerminalDisplay.cpp
+--- ./kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp	2007-10-08 14:16:58.000000000 +0700
++++ ./kdebase-3.96.0/apps/konsole/src/TerminalDisplay.cpp	2007-12-27 15:38:21.000000000 +0700
 @@ -632,10 +632,23 @@
      // draw text
      if ( isLineCharString(text) )
@@ -109,7 +110,7 @@ diff -uNr kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp kdebase-3.96.0
               (_image[ qMin(loc(x+len,y)+1,_imageSize) ].character == 0) == doubleWidth &&
               isLineChar( c = _image[loc(x+len,y)].character) == lineDraw) // Assignment!
        {
-@@ -2314,19 +2328,34 @@
+@@ -2314,19 +2328,41 @@
                  return font();
              break;
          case Qt::ImCursorPosition:
@@ -134,7 +135,14 @@ diff -uNr kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp kdebase-3.96.0
          case Qt::ImSurroundingText:
 -            {
 +            {   
-+                return QString(QString::null);
++                // Do not try to even peek screen buffer. The real text buffer
++                // owner is the process that runs on konsole, not konsole
++                // itself. Trying to do so would cause text input in remote
++                // sessions to depend on konsole's response, which can block
++                // one from typing continuously without waiting the characters
++                // to appear on screen, for instance.
++                return QString();
++
                  // return the text from the current line
 -                QString lineText;
 -                QTextStream stream(&lineText);
@@ -153,9 +161,9 @@ diff -uNr kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp kdebase-3.96.0
              }
              break;
          case Qt::ImCurrentSelection:
-diff -uNr kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.h kdebase-3.96.0/apps/konsole/src/TerminalDisplay.h
---- kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.h	2007-10-03 18:02:19.000000000 +0700
-+++ kdebase-3.96.0/apps/konsole/src/TerminalDisplay.h	2007-12-04 15:14:06.000000000 +0700
+diff -uNr ./kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.h ./kdebase-3.96.0/apps/konsole/src/TerminalDisplay.h
+--- ./kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.h	2007-10-03 18:02:19.000000000 +0700
++++ ./kdebase-3.96.0/apps/konsole/src/TerminalDisplay.h	2007-12-27 15:41:02.000000000 +0700
 @@ -551,6 +551,10 @@
      // draws the characters or line graphics in a text fragment
      void drawCharacters(QPainter& painter, const QRect& rect,  const QString& text, 
