@@ -1,7 +1,7 @@
-diff -uNr kde4libs-4.0.0.org/kate/document/katedocument.cpp kde4libs-4.0.0/kate/document/katedocument.cpp
---- kde4libs-4.0.0.org/kate/document/katedocument.cpp	2008-01-14 17:27:44.000000000 +0700
-+++ kde4libs-4.0.0/kate/document/katedocument.cpp	2008-01-14 17:34:55.000000000 +0700
-@@ -560,6 +560,16 @@
+diff -uNr ./kdelibs-3.96.0.org/kate/document/katedocument.cpp ./kdelibs-3.96.0/kate/document/katedocument.cpp
+--- ./kdelibs-3.96.0.org/kate/document/katedocument.cpp	2007-11-14 07:18:17.000000000 +0700
++++ ./kdelibs-3.96.0/kate/document/katedocument.cpp	2008-01-02 18:36:47.000000000 +0700
+@@ -561,6 +561,16 @@
    return l->string();
  }
  
@@ -18,30 +18,27 @@ diff -uNr kde4libs-4.0.0.org/kate/document/katedocument.cpp kde4libs-4.0.0/kate/
  bool KateDocument::setText(const QString &s)
  {
    if (!isReadWrite())
-@@ -1192,7 +1202,8 @@
+@@ -1193,13 +1203,15 @@
        for (z=searchStart; z > 0; z--)
        {
          if (t.at(z).isSpace()) break;
 -        if ( ! nw && highlight()->canBreakAt( t.at(z) , l->attribute(z) ) )
-+        if (l->isBreakable(z+1)) break;
-+	if ( ! nw && highlight()->canBreakAt( t.at(z) , l->attribute(z) ) )
++        if (l->isBreakable(z)) break;
++        if ( ! nw && highlight()->canBreakAt( t.at(z) , l->attribute(z) ))
          nw = z;
        }
  
-@@ -1238,7 +1249,8 @@
- 
-       if (removeTrailingSpace) {
+       if (z > 0)
+       {
          // cu space
--        editRemoveText (line + 1, z - 1, 1);
 +        if (!l->isBreakable(z))
-+	  editRemoveText (line + 1, z - 1, 1);
+         editRemoveText (line, z, 1);
        }
-     }
-   }
-diff -uNr kde4libs-4.0.0.org/kate/document/katedocument.h kde4libs-4.0.0/kate/document/katedocument.h
---- kde4libs-4.0.0.org/kate/document/katedocument.h	2008-01-14 17:27:44.000000000 +0700
-+++ kde4libs-4.0.0/kate/document/katedocument.h	2008-01-14 17:29:35.000000000 +0700
-@@ -183,6 +183,7 @@
+       else
+diff -uNr ./kdelibs-3.96.0.org/kate/document/katedocument.h ./kdelibs-3.96.0/kate/document/katedocument.h
+--- ./kdelibs-3.96.0.org/kate/document/katedocument.h	2007-11-14 07:18:17.000000000 +0700
++++ ./kdelibs-3.96.0/kate/document/katedocument.h	2008-01-02 17:57:11.000000000 +0700
+@@ -182,6 +182,7 @@
      virtual QString line(int line) const;
      virtual QChar character(const KTextEditor::Cursor& position) const;
      int lines() const;
@@ -49,9 +46,9 @@ diff -uNr kde4libs-4.0.0.org/kate/document/katedocument.h kde4libs-4.0.0/kate/do
      virtual KTextEditor::Cursor documentEnd() const;
      int numVisLines() const;
      int totalCharacters() const;
-diff -uNr kde4libs-4.0.0.org/kate/document/katetextline.cpp kde4libs-4.0.0/kate/document/katetextline.cpp
---- kde4libs-4.0.0.org/kate/document/katetextline.cpp	2008-01-14 17:27:44.000000000 +0700
-+++ kde4libs-4.0.0/kate/document/katetextline.cpp	2008-01-14 17:29:35.000000000 +0700
+diff -uNr ./kdelibs-3.96.0.org/kate/document/katetextline.cpp ./kdelibs-3.96.0/kate/document/katetextline.cpp
+--- ./kdelibs-3.96.0.org/kate/document/katetextline.cpp	2007-11-14 07:18:17.000000000 +0700
++++ ./kdelibs-3.96.0/kate/document/katetextline.cpp	2008-01-02 18:07:07.000000000 +0700
 @@ -28,6 +28,107 @@
  
  #include <QtCore/QRegExp>
@@ -186,9 +183,9 @@ diff -uNr kde4libs-4.0.0.org/kate/document/katetextline.cpp kde4libs-4.0.0/kate/
  }
  
  void KateTextLine::truncate(int newLen)
-diff -uNr kde4libs-4.0.0.org/kate/document/katetextline.h kde4libs-4.0.0/kate/document/katetextline.h
---- kde4libs-4.0.0.org/kate/document/katetextline.h	2008-01-14 17:27:44.000000000 +0700
-+++ kde4libs-4.0.0/kate/document/katetextline.h	2008-01-14 17:29:35.000000000 +0700
+diff -uNr ./kdelibs-3.96.0.org/kate/document/katetextline.h ./kdelibs-3.96.0/kate/document/katetextline.h
+--- ./kdelibs-3.96.0.org/kate/document/katetextline.h	2007-07-26 17:39:55.000000000 +0700
++++ ./kdelibs-3.96.0/kate/document/katetextline.h	2008-01-02 17:59:25.000000000 +0700
 @@ -285,6 +285,12 @@
      void insertText (int pos, const QString& insText);
  
@@ -214,10 +211,10 @@ diff -uNr kde4libs-4.0.0.org/kate/document/katetextline.h kde4libs-4.0.0/kate/do
      /**
       * context stack
       */
-diff -uNr kde4libs-4.0.0.org/kate/view/kateviewinternal.cpp kde4libs-4.0.0/kate/view/kateviewinternal.cpp
---- kde4libs-4.0.0.org/kate/view/kateviewinternal.cpp	2008-01-14 17:27:44.000000000 +0700
-+++ kde4libs-4.0.0/kate/view/kateviewinternal.cpp	2008-01-14 17:29:35.000000000 +0700
-@@ -732,7 +732,11 @@
+diff -uNr ./kdelibs-3.96.0.org/kate/view/kateviewinternal.cpp ./kdelibs-3.96.0/kate/view/kateviewinternal.cpp
+--- ./kdelibs-3.96.0.org/kate/view/kateviewinternal.cpp	2007-11-06 14:59:11.000000000 +0700
++++ ./kdelibs-3.96.0/kate/view/kateviewinternal.cpp	2008-01-02 18:04:20.000000000 +0700
+@@ -715,7 +715,11 @@
  
  void KateViewInternal::doDelete()
  {
@@ -230,7 +227,7 @@ diff -uNr kde4libs-4.0.0.org/kate/view/kateviewinternal.cpp kde4libs-4.0.0/kate/
  }
  
  void KateViewInternal::doBackspace()
-@@ -1024,8 +1028,11 @@
+@@ -1007,8 +1011,11 @@
    }
    else if( h->isInWord( m_doc->line( c.line() )[ c.column() - 1 ] ) )
    {
@@ -244,7 +241,7 @@ diff -uNr kde4libs-4.0.0.org/kate/view/kateviewinternal.cpp kde4libs-4.0.0/kate/
    }
    else
    {
-@@ -1062,7 +1069,9 @@
+@@ -1045,7 +1052,9 @@
    }
    else if( h->isInWord( m_doc->line( c.line() )[ c.column() ] ) )
    {
@@ -255,7 +252,7 @@ diff -uNr kde4libs-4.0.0.org/kate/view/kateviewinternal.cpp kde4libs-4.0.0/kate/
        ++c;
    }
    else
-@@ -3410,7 +3419,7 @@
+@@ -3373,7 +3382,7 @@
        return renderer()->currentFont();
  
      case Qt::ImCursorPosition:
@@ -264,3 +261,21 @@ diff -uNr kde4libs-4.0.0.org/kate/view/kateviewinternal.cpp kde4libs-4.0.0/kate/
  
      case Qt::ImSurroundingText:
        if (KateTextLine::Ptr l = textLine(m_cursor.line()))
+@@ -3399,7 +3408,7 @@
+   }
+ 
+   // Finished this input method context?
+-  if (m_imPreedit && e->preeditString().isEmpty() && e->commitString().isEmpty()) {
++  if (m_imPreedit && e->preeditString().isEmpty() && e->commitString().isEmpty() && e->replacementLength() == 0) {
+     m_view->removeInternalHighlight(m_imPreedit);
+     delete m_imPreedit;
+     m_imPreedit = 0L;
+@@ -3421,7 +3430,7 @@
+   if (!e->commitString().isEmpty() || e->replacementLength()) {
+     KTextEditor::Range preeditRange = *m_imPreedit;
+ 
+-    KTextEditor::Cursor start(m_imPreedit->start().line(), m_imPreedit->start().column() + e->replacementStart());
++    KTextEditor::Cursor start(m_cursor.line(), m_cursor.column() + e->replacementStart());
+     KTextEditor::Cursor removeEnd = start + KTextEditor::Cursor(0, e->replacementLength());
+ 
+     m_view->doc()->editStart(true);
