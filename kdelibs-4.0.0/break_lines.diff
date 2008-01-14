@@ -1,0 +1,77 @@
+diff -uNr kdelibs-3.96.0.org/khtml/rendering/break_lines.cpp kdelibs-3.96.0/khtml/rendering/break_lines.cpp
+--- kdelibs-3.96.0.org/khtml/rendering/break_lines.cpp	2007-06-27 17:53:57.000000000 +0700
++++ kdelibs-3.96.0/khtml/rendering/break_lines.cpp	2007-11-28 16:12:35.000000000 +0700
+@@ -1,6 +1,7 @@
+ #include <break_lines.h>
+ #include <klibloader.h>
+ #include <QtCore/QTextCodec>
++#include <qlibrary.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <config.h>
+@@ -31,19 +32,19 @@
+             numwbrpos = 0;
+             numisbreakable = 0x400;
+             isbreakable = (int *) malloc(numisbreakable*sizeof(int));
+-	    library = 0;
++	    //library = 0;
+         }
+         ~ThaiCache() {
+             free(wbrpos);
+             free(isbreakable);
+-            if (library) library->unload();
++           //if (library) library->unload();
+         }
+         const QChar *string;
+         int *wbrpos;
+         int *isbreakable;
+         int allocated;
+         int numwbrpos,numisbreakable;
+-        KLibrary *library;
++        //KLibrary *library;
+     };
+     static ThaiCache *cache = 0;
+ 
+@@ -62,10 +63,11 @@
+ 	//printf("Entering isBreakableThai with pos = %d\n", pos);
+ 
+ #ifndef HAVE_LIBTHAI
+-
++/*
+ 	KLibrary *lib = 0;
+-
++*/
+         /* load libthai dynamically */
++/*
+ 	if (( !th_brk ) && thaiCodec  ) {
+ 	    printf("Try to load libthai dynamically...\n");
+             KLibLoader *loader = KLibLoader::self();
+@@ -80,6 +82,19 @@
+                     lib->unload();
+             }
+         }
++*/
++        
++        // KLibLoader requires libthai.la which is usually in libthai-dev package or doesn't exist at all
++        // QLibrary::resolve will look for libthai.so.0 directly
++        /* load libthai dynamically */
++        if (!th_brk && thaiCodec) {
++            printf("Try to load libthai dynamically...\n");
++            th_brk = (th_brk_def)QLibrary::resolve("thai", 0, "th_brk");
++            if (!th_brk) {
++            printf("Error, can't load libthai...\n");
++                thaiCodec = 0;
++                    }
++        }
+ 
+         if (!th_brk ) {
+             return true;
+@@ -89,7 +104,7 @@
+ 	if (!cache ) {
+             cache = new ThaiCache;
+ #ifndef HAVE_LIBTHAI
+-            cache->library = lib;
++            //cache->library = lib;
+ #endif
+ 	}
+ 
