@@ -1,0 +1,26 @@
+diff -uNr kdelibs-4.0.0.orig/khtml/rendering/break_lines.cpp kdelibs-4.0.0/khtml/rendering/break_lines.cpp
+--- kdelibs-4.0.0.orig/khtml/rendering/break_lines.cpp	2008-01-05 06:59:34.000000000 +0700
++++ kdelibs-4.0.0/khtml/rendering/break_lines.cpp	2008-01-17 17:41:44.000000000 +0700
+@@ -10,7 +10,7 @@
+  * libthai since compile time. Otherwise it will try to
+  * dlopen at run-time
+  *
+- * Ott Pattara Nov 14, 2004
++ * Ott Pattara, Jakkapun Kwanroengjai Jan 17, 2008
+  */
+ 
+ #ifndef HAVE_LIBTHAI
+@@ -101,10 +101,11 @@
+ 
+             cache->numwbrpos = th_brk((const unsigned char*) cstr.data(), cache->wbrpos, cache->allocated);
+             //fprintf(stderr,"libthai returns with value %d\n",cache->numwbrpos);
+-            if (cache->numwbrpos > cache->allocated) {
+-                cache->allocated = cache->numwbrpos;
++            if (cache->numwbrpos >= cache->allocated) {
++                cache->allocated = len;
+                 cache->wbrpos = (int *)realloc(cache->wbrpos, cache->allocated*sizeof(int));
+                 cache->numwbrpos = th_brk((const unsigned char*) cstr.data(), cache->wbrpos, cache->allocated);
++		 cache->wbrpos = (int *)realloc(cache->wbrpos, cache->numwbrpos*sizeof(int));
+             }
+ 	    if ( len > cache->numisbreakable ) {
+ 		cache->numisbreakable=len;
