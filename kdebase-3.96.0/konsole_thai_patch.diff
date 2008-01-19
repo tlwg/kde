@@ -1,20 +1,19 @@
-diff -uNr ./kdebase-3.96.0.org/apps/konsole/src/Screen.cpp ./kdebase-3.96.0/apps/konsole/src/Screen.cpp
---- ./kdebase-3.96.0.org/apps/konsole/src/Screen.cpp	2007-10-03 18:02:19.000000000 +0700
-+++ ./kdebase-3.96.0/apps/konsole/src/Screen.cpp	2007-12-27 15:35:30.000000000 +0700
-@@ -725,8 +725,43 @@
+diff -uNr kdebase-4.0.0.orig/apps/konsole/src/Screen.cpp kdebase-4.0.0/apps/konsole/src/Screen.cpp
+--- kdebase-4.0.0.orig/apps/konsole/src/Screen.cpp	2008-01-19 18:19:52.000000000 +0700
++++ kdebase-4.0.0/apps/konsole/src/Screen.cpp	2008-01-19 18:28:02.000000000 +0700
+@@ -755,6 +755,42 @@
  
    int w = konsole_wcwidth(c);
  
--  if (w <= 0)
--     return;
 +  // force combining character at column 0 to always take the first cell
-+  if (w == 0 && cuX == 0)
++  if (w == 0 && cuX == 0 && QChar::category(c) == QChar::Mark_NonSpacing)
 +    w = 1;
 +
 +  //Set CharSequence
-+  ushort u_char_combind[5];
++  const int MAX_COMBINING_CHARS = 5;
++  ushort u_char_combind[MAX_COMBINING_CHARS];
 +
-+  if (w == 0 && cuX > 0) {
++  if (w == 0 && cuX > 0 && QChar::category(c) == QChar::Mark_NonSpacing) {
 +    if (screenLines[cuY][cuX-1].rendition & RE_EXTENDED_CHAR)
 +    {
 +        // sequence of characters
@@ -42,14 +41,12 @@ diff -uNr ./kdebase-3.96.0.org/apps/konsole/src/Screen.cpp ./kdebase-3.96.0/apps
 +    return;            
 +  }
 +  
-+//  if (w <= 0)
-+//     return;
+   if (w <= 0)
+      return;
  
-   if (cuX+w > columns) {
-     if (getMode(MODE_Wrap)) {
-diff -uNr ./kdebase-3.96.0.org/apps/konsole/src/TerminalCharacterDecoder.cpp ./kdebase-3.96.0/apps/konsole/src/TerminalCharacterDecoder.cpp
---- ./kdebase-3.96.0.org/apps/konsole/src/TerminalCharacterDecoder.cpp	2007-06-27 17:44:03.000000000 +0700
-+++ ./kdebase-3.96.0/apps/konsole/src/TerminalCharacterDecoder.cpp	2007-12-27 15:41:02.000000000 +0700
+diff -uNr kdebase-4.0.0.orig/apps/konsole/src/TerminalCharacterDecoder.cpp kdebase-4.0.0/apps/konsole/src/TerminalCharacterDecoder.cpp
+--- kdebase-4.0.0.orig/apps/konsole/src/TerminalCharacterDecoder.cpp	2008-01-19 18:19:52.000000000 +0700
++++ kdebase-4.0.0/apps/konsole/src/TerminalCharacterDecoder.cpp	2008-01-19 18:20:55.000000000 +0700
 @@ -80,10 +80,20 @@
          }
      }
@@ -75,10 +72,10 @@ diff -uNr ./kdebase-3.96.0.org/apps/konsole/src/TerminalCharacterDecoder.cpp ./k
  
  	*_output << plainText;
  }
-diff -uNr ./kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp ./kdebase-3.96.0/apps/konsole/src/TerminalDisplay.cpp
---- ./kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp	2007-10-08 14:16:58.000000000 +0700
-+++ ./kdebase-3.96.0/apps/konsole/src/TerminalDisplay.cpp	2007-12-27 15:38:21.000000000 +0700
-@@ -632,10 +632,23 @@
+diff -uNr kdebase-4.0.0.orig/apps/konsole/src/TerminalDisplay.cpp kdebase-4.0.0/apps/konsole/src/TerminalDisplay.cpp
+--- kdebase-4.0.0.orig/apps/konsole/src/TerminalDisplay.cpp	2008-01-19 18:19:52.000000000 +0700
++++ kdebase-4.0.0/apps/konsole/src/TerminalDisplay.cpp	2008-01-19 18:20:55.000000000 +0700
+@@ -648,10 +648,23 @@
      // draw text
      if ( isLineCharString(text) )
  	  	drawLineCharString(painter,rect.x(),rect.y(),text,style);
@@ -102,7 +99,7 @@ diff -uNr ./kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp ./kdebase-3.
  void TerminalDisplay::drawTextFragment(QPainter& painter , 
                                         const QRect& rect,
                                         const QString& text, 
-@@ -1229,6 +1242,7 @@
+@@ -1260,6 +1273,7 @@
               _image[loc(x+len,y)].foregroundColor == currentForeground &&
               _image[loc(x+len,y)].backgroundColor == currentBackground &&
               _image[loc(x+len,y)].rendition == currentRendition &&
@@ -110,7 +107,7 @@ diff -uNr ./kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp ./kdebase-3.
               (_image[ qMin(loc(x+len,y)+1,_imageSize) ].character == 0) == doubleWidth &&
               isLineChar( c = _image[loc(x+len,y)].character) == lineDraw) // Assignment!
        {
-@@ -2314,19 +2328,41 @@
+@@ -2340,19 +2354,41 @@
                  return font();
              break;
          case Qt::ImCursorPosition:
@@ -161,10 +158,10 @@ diff -uNr ./kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.cpp ./kdebase-3.
              }
              break;
          case Qt::ImCurrentSelection:
-diff -uNr ./kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.h ./kdebase-3.96.0/apps/konsole/src/TerminalDisplay.h
---- ./kdebase-3.96.0.org/apps/konsole/src/TerminalDisplay.h	2007-10-03 18:02:19.000000000 +0700
-+++ ./kdebase-3.96.0/apps/konsole/src/TerminalDisplay.h	2007-12-27 15:41:02.000000000 +0700
-@@ -551,6 +551,10 @@
+diff -uNr kdebase-4.0.0.orig/apps/konsole/src/TerminalDisplay.h kdebase-4.0.0/apps/konsole/src/TerminalDisplay.h
+--- kdebase-4.0.0.orig/apps/konsole/src/TerminalDisplay.h	2008-01-19 18:19:52.000000000 +0700
++++ kdebase-4.0.0/apps/konsole/src/TerminalDisplay.h	2008-01-19 18:20:55.000000000 +0700
+@@ -572,6 +572,10 @@
      // draws the characters or line graphics in a text fragment
      void drawCharacters(QPainter& painter, const QRect& rect,  const QString& text, 
                                             const Character* style, bool invertCharacterColor);
