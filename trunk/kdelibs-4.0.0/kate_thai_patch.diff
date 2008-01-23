@@ -51,7 +51,7 @@ diff -uNr kde4libs-4.0.0.orig/kate/document/katedocument.h kde4libs-4.0.0/kate/d
      int totalCharacters() const;
 diff -uNr kde4libs-4.0.0.orig/kate/document/katetextline.cpp kde4libs-4.0.0/kate/document/katetextline.cpp
 --- kde4libs-4.0.0.orig/kate/document/katetextline.cpp	2008-01-21 17:00:06.000000000 +0700
-+++ kde4libs-4.0.0/kate/document/katetextline.cpp	2008-01-23 11:08:26.000000000 +0700
++++ kde4libs-4.0.0/kate/document/katetextline.cpp	2008-01-23 11:57:40.000000000 +0700
 @@ -28,6 +28,107 @@
  
  #include <QtCore/QRegExp>
@@ -134,8 +134,8 @@ diff -uNr kde4libs-4.0.0.orig/kate/document/katetextline.cpp kde4libs-4.0.0/kate
 +        //printf("About to call libthai::th_brk with str: %s",cstr.data());
 +         cache->numwbrpos = th_brk((const unsigned char*) cstr.data(), cache->wbrpos, cache->allocated);
 +        //fprintf(stderr,"libthai returns with value %d\n",cache->numwbrpos);
-+        if (cache->numwbrpos > cache->allocated) {
-+            cache->allocated = cache->numwbrpos;
++        if (cache->numwbrpos >= cache->allocated) {
++            cache->allocated = len;
 +            cache->wbrpos = (int *)realloc(cache->wbrpos, cache->allocated*sizeof(int));
 +            cache->numwbrpos = th_brk((const unsigned char*) cstr.data(), cache->wbrpos, cache->allocated);
 +        }
