@@ -1,6 +1,6 @@
 diff -uNrp kde4libs-4.0.0.orig/kate/document/katedocument.cpp kde4libs-4.0.0/kate/document/katedocument.cpp
 --- kde4libs-4.0.0.orig/kate/document/katedocument.cpp	2008-01-24 14:16:47.000000000 +0700
-+++ kde4libs-4.0.0/kate/document/katedocument.cpp	2008-01-24 14:49:14.000000000 +0700
++++ kde4libs-4.0.0/kate/document/katedocument.cpp	2008-01-24 16:32:55.000000000 +0700
 @@ -560,6 +560,16 @@ QString KateDocument::line( int line ) c
    return l->string();
  }
@@ -18,7 +18,7 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katedocument.cpp kde4libs-4.0.0/kat
  bool KateDocument::setText(const QString &s)
  {
    if (!isReadWrite())
-@@ -1189,25 +1199,24 @@ bool KateDocument::wrapText(int startLin
+@@ -1189,25 +1199,21 @@ bool KateDocument::wrapText(int startLin
        // This could be a priority (setting) in the hl/filetype/document
        int z = 0;
        int nw = 0; // alternative position, a non word character
@@ -30,15 +30,12 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katedocument.cpp kde4libs-4.0.0/kat
 -        if ( ! nw && highlight()->canBreakAt( t.at(z) , l->attribute(z) ) )
 -        nw = z;
 +        if (t.at(z).isSpace()) {
-+		  removeTrailingSpace = true; 
-+		  z++;
-+		  break;
-+		}
-+        if (l->isBreakable(z+1)) {
-+		  z++;
-+		  break;
-+		}
-+		if ( ! nw && highlight()->canBreakAt( t.at(z) , l->attribute(z) ) )
++	  removeTrailingSpace = true; 
++	  z++;
++	  break;
++	}
++        if (l->isBreakable(z)) break;
++	if ( ! nw && highlight()->canBreakAt( t.at(z) , l->attribute(z) ) )
 +          nw = z;
        }
  
@@ -71,7 +68,7 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katedocument.h kde4libs-4.0.0/kate/
      int totalCharacters() const;
 diff -uNrp kde4libs-4.0.0.orig/kate/document/katetextline.cpp kde4libs-4.0.0/kate/document/katetextline.cpp
 --- kde4libs-4.0.0.orig/kate/document/katetextline.cpp	2008-01-24 14:16:47.000000000 +0700
-+++ kde4libs-4.0.0/kate/document/katetextline.cpp	2008-01-24 14:30:46.000000000 +0700
++++ kde4libs-4.0.0/kate/document/katetextline.cpp	2008-01-24 16:33:59.000000000 +0700
 @@ -28,6 +28,108 @@
  
  #include <QtCore/QRegExp>
@@ -181,7 +178,7 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katetextline.cpp kde4libs-4.0.0/kat
  KateTextLine::KateTextLine ()
    : m_flags(0)
  {
-@@ -49,6 +151,40 @@ void KateTextLine::insertText (int pos, 
+@@ -49,6 +151,36 @@ void KateTextLine::insertText (int pos, 
      return;
  
    m_text.insert (pos, insText);
@@ -191,28 +188,24 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katetextline.cpp kde4libs-4.0.0/kat
 +    m_breakLine.insert (i, false);
 +  }
 +
-+  int i_pos = pos;
-+  while (i_pos != 0 && !m_text[i_pos].isSpace()) {
-+    --i_pos;
++  int i = pos;
++  while (i != 0 && !m_text[i].isSpace()) {
++    --i;
 +  }
 +
-+  int th_pos = 0;
-+  int th_len = 0; 
-+  int i = i_pos;
 +  while (i < pos + insText.length()) {
-+    th_pos = i;
-+    while (m_text[th_pos].unicode() < 0x0e00 && m_text[th_pos].unicode() >= 0x0e80 && th_pos < pos + insText.length())
-+      th_pos++;
-+    while (m_text[th_pos + th_len].unicode() >= 0x0e00 && m_text[th_pos + th_len].unicode() < 0x0e80 && th_pos + th_len < pos + insText.length())
++    int th_len = 0;
++    while (m_text[i].unicode() < 0x0e00 && m_text[i].unicode() >= 0x0e80 && i < pos + insText.length())
++      i++;
++    while (m_text[i + th_len].unicode() >= 0x0e00 && m_text[i + th_len].unicode() < 0x0e80 && i + th_len < pos + insText.length())
 +      th_len++;
 +
 +    if (th_len > 0) {
-+      int* th_break = isbreakWordThai(m_text.constData(), th_pos, th_len);
-+      for (int j = th_pos;j < th_pos + th_len; j++)
-+        m_breakLine[j] = th_break[j - th_pos];
++      int* th_break = isbreakWordThai(m_text.constData(), i, th_len);
++      for (int j = i;j < i + th_len; j++)
++        m_breakLine[j] = th_break[j - i];
 +    }
-+    i = th_pos + th_len + 1;
-+    th_len = 0;
++    i += th_len + 1;
 +  }
 +}
 +
@@ -222,7 +215,7 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katetextline.cpp kde4libs-4.0.0/kat
  }
  
  void KateTextLine::removeText (uint pos, uint delLen)
-@@ -69,6 +205,7 @@ void KateTextLine::removeText (uint pos,
+@@ -69,6 +201,7 @@ void KateTextLine::removeText (uint pos,
      delLen = textLen - pos;
  
    m_text.remove (pos, delLen);
