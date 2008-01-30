@@ -1,7 +1,7 @@
-diff -uNr kdebase-4.0.0.orig/apps/konsole/src/Screen.cpp kdebase-4.0.0/apps/konsole/src/Screen.cpp
---- kdebase-4.0.0.orig/apps/konsole/src/Screen.cpp	2008-01-19 18:19:52.000000000 +0700
-+++ kdebase-4.0.0/apps/konsole/src/Screen.cpp	2008-01-19 18:28:02.000000000 +0700
-@@ -755,6 +755,42 @@
+diff -uNrp kdebase-kde4-4.0.0.orig/apps/konsole/src/Screen.cpp kdebase-kde4-4.0.0/apps/konsole/src/Screen.cpp
+--- kdebase-kde4-4.0.0.orig/apps/konsole/src/Screen.cpp	2008-01-05 06:54:02.000000000 +0700
++++ kdebase-kde4-4.0.0/apps/konsole/src/Screen.cpp	2008-01-30 22:03:24.000000000 +0700
+@@ -755,6 +755,42 @@ void Screen::ShowCharacter(unsigned shor
  
    int w = konsole_wcwidth(c);
  
@@ -44,10 +44,10 @@ diff -uNr kdebase-4.0.0.orig/apps/konsole/src/Screen.cpp kdebase-4.0.0/apps/kons
    if (w <= 0)
       return;
  
-diff -uNr kdebase-4.0.0.orig/apps/konsole/src/TerminalCharacterDecoder.cpp kdebase-4.0.0/apps/konsole/src/TerminalCharacterDecoder.cpp
---- kdebase-4.0.0.orig/apps/konsole/src/TerminalCharacterDecoder.cpp	2008-01-19 18:19:52.000000000 +0700
-+++ kdebase-4.0.0/apps/konsole/src/TerminalCharacterDecoder.cpp	2008-01-19 18:20:55.000000000 +0700
-@@ -80,10 +80,20 @@
+diff -uNrp kdebase-kde4-4.0.0.orig/apps/konsole/src/TerminalCharacterDecoder.cpp kdebase-kde4-4.0.0/apps/konsole/src/TerminalCharacterDecoder.cpp
+--- kdebase-kde4-4.0.0.orig/apps/konsole/src/TerminalCharacterDecoder.cpp	2008-01-05 06:54:02.000000000 +0700
++++ kdebase-kde4-4.0.0/apps/konsole/src/TerminalCharacterDecoder.cpp	2008-01-30 22:03:24.000000000 +0700
+@@ -80,10 +80,20 @@ void PlainTextDecoder::decodeLine(const 
          }
      }
  
@@ -55,51 +55,27 @@ diff -uNr kdebase-4.0.0.orig/apps/konsole/src/TerminalCharacterDecoder.cpp kdeba
 -	{
 -		plainText.append( QChar(characters[i].character) );
 -	}
-+    for (int i=0;i<outputCount;i++)
-+    {
-+        if (characters[i].rendition & RE_EXTENDED_CHAR) 
-+        { 
-+            ushort extendedCharLength = 0;
-+            ushort* chars = ExtendedCharTable::instance 
-+                            .lookupExtendedChar(characters[i].charSequence,extendedCharLength);
++       for (int i=0;i<outputCount;i++)
++       {
++           if (characters[i].rendition & RE_EXTENDED_CHAR) 
++           { 
++               ushort extendedCharLength = 0;
++               ushort* chars = ExtendedCharTable::instance 
++                               .lookupExtendedChar(characters[i].charSequence,extendedCharLength);
 +
-+            for (int j = 0;j<extendedCharLength;j++) 
-+               plainText.append(QChar(chars[j]));
++               for (int j = 0;j<extendedCharLength;j++) 
++                  plainText.append(QChar(chars[j]));
 +         
-+        } else
-+            plainText.append( QChar(characters[i].character) );
-+    }
++           } else
++               plainText.append( QChar(characters[i].character) );
++       }
  
  	*_output << plainText;
  }
-diff -uNr kdebase-4.0.0.orig/apps/konsole/src/TerminalDisplay.cpp kdebase-4.0.0/apps/konsole/src/TerminalDisplay.cpp
---- kdebase-4.0.0.orig/apps/konsole/src/TerminalDisplay.cpp	2008-01-19 18:19:52.000000000 +0700
-+++ kdebase-4.0.0/apps/konsole/src/TerminalDisplay.cpp	2008-01-19 18:20:55.000000000 +0700
-@@ -648,10 +648,23 @@
-     // draw text
-     if ( isLineCharString(text) )
- 	  	drawLineCharString(painter,rect.x(),rect.y(),text,style);
-+    else if ( style->rendition & RE_EXTENDED_CHAR )     //draw CharSequence
-+        drawCharSequence(painter,rect,text,style);
-     else
-         painter.drawText(rect,text);
- }
- 
-+void TerminalDisplay::drawCharSequence(   QPainter& painter,const QRect& rect, const QString& str, 
-+                                    const Character* attributes)
-+{ 
-+    painter.drawText(rect,str[0]);
-+    Qt::BGMode bgMode = painter.backgroundMode();
-+    painter.setBackgroundMode(Qt::TransparentMode);
-+    for (int i = 1; i < str.length(); i++)
-+        painter.drawText(rect,str[i]);
-+    painter.setBackgroundMode(bgMode);
-+}
-+
- void TerminalDisplay::drawTextFragment(QPainter& painter , 
-                                        const QRect& rect,
-                                        const QString& text, 
-@@ -1260,6 +1273,7 @@
+diff -uNrp kdebase-kde4-4.0.0.orig/apps/konsole/src/TerminalDisplay.cpp kdebase-kde4-4.0.0/apps/konsole/src/TerminalDisplay.cpp
+--- kdebase-kde4-4.0.0.orig/apps/konsole/src/TerminalDisplay.cpp	2008-01-05 06:54:02.000000000 +0700
++++ kdebase-kde4-4.0.0/apps/konsole/src/TerminalDisplay.cpp	2008-01-30 22:05:01.000000000 +0700
+@@ -1260,6 +1260,7 @@ void TerminalDisplay::drawContents(QPain
               _image[loc(x+len,y)].foregroundColor == currentForeground &&
               _image[loc(x+len,y)].backgroundColor == currentBackground &&
               _image[loc(x+len,y)].rendition == currentRendition &&
@@ -107,7 +83,7 @@ diff -uNr kdebase-4.0.0.orig/apps/konsole/src/TerminalDisplay.cpp kdebase-4.0.0/
               (_image[ qMin(loc(x+len,y)+1,_imageSize) ].character == 0) == doubleWidth &&
               isLineChar( c = _image[loc(x+len,y)].character) == lineDraw) // Assignment!
        {
-@@ -2340,19 +2354,41 @@
+@@ -2340,19 +2341,41 @@ QVariant TerminalDisplay::inputMethodQue
                  return font();
              break;
          case Qt::ImCursorPosition:
@@ -158,17 +134,3 @@ diff -uNr kdebase-4.0.0.orig/apps/konsole/src/TerminalDisplay.cpp kdebase-4.0.0/
              }
              break;
          case Qt::ImCurrentSelection:
-diff -uNr kdebase-4.0.0.orig/apps/konsole/src/TerminalDisplay.h kdebase-4.0.0/apps/konsole/src/TerminalDisplay.h
---- kdebase-4.0.0.orig/apps/konsole/src/TerminalDisplay.h	2008-01-19 18:19:52.000000000 +0700
-+++ kdebase-4.0.0/apps/konsole/src/TerminalDisplay.h	2008-01-19 18:20:55.000000000 +0700
-@@ -572,6 +572,10 @@
-     // draws the characters or line graphics in a text fragment
-     void drawCharacters(QPainter& painter, const QRect& rect,  const QString& text, 
-                                            const Character* style, bool invertCharacterColor);
-+    // draws the charSequence 
-+    void drawCharSequence(QPainter& painter, const QRect& rect, 
-+                          const QString& str, const Character* attributes);
-+
-     // draws a string of line graphics
- 	void drawLineCharString(QPainter& painter, int x, int y, 
-                             const QString& str, const Character* attributes);
