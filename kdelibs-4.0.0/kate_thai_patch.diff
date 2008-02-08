@@ -1,6 +1,6 @@
-diff -uNrp kde4libs-4.0.0.orig/kate/document/katedocument.cpp kde4libs-4.0.0/kate/document/katedocument.cpp
---- kde4libs-4.0.0.orig/kate/document/katedocument.cpp	2008-01-28 18:00:43.000000000 +0700
-+++ kde4libs-4.0.0/kate/document/katedocument.cpp	2008-01-28 18:02:02.000000000 +0700
+diff -uNrp kdelibs-4.0.0.orig/kate/document/katedocument.cpp kdelibs-4.0.0/kate/document/katedocument.cpp
+--- kdelibs-4.0.0.orig/kate/document/katedocument.cpp	2008-01-05 06:59:49.000000000 +0700
++++ kdelibs-4.0.0/kate/document/katedocument.cpp	2008-02-08 16:18:23.000000000 +0700
 @@ -560,6 +560,16 @@ QString KateDocument::line( int line ) c
    return l->string();
  }
@@ -55,9 +55,9 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katedocument.cpp kde4libs-4.0.0/kat
        {
          // There was no space to break at so break at a nonword character if
          // found, or at the wrapcolumn ( that needs be configurable )
-diff -uNrp kde4libs-4.0.0.orig/kate/document/katedocument.h kde4libs-4.0.0/kate/document/katedocument.h
---- kde4libs-4.0.0.orig/kate/document/katedocument.h	2008-01-28 18:00:43.000000000 +0700
-+++ kde4libs-4.0.0/kate/document/katedocument.h	2008-01-28 18:02:02.000000000 +0700
+diff -uNrp kdelibs-4.0.0.orig/kate/document/katedocument.h kdelibs-4.0.0/kate/document/katedocument.h
+--- kdelibs-4.0.0.orig/kate/document/katedocument.h	2008-01-05 06:59:49.000000000 +0700
++++ kdelibs-4.0.0/kate/document/katedocument.h	2008-02-08 16:18:23.000000000 +0700
 @@ -183,6 +183,7 @@ class KateDocument : public KTextEditor:
      virtual QString line(int line) const;
      virtual QChar character(const KTextEditor::Cursor& position) const;
@@ -66,10 +66,10 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katedocument.h kde4libs-4.0.0/kate/
      virtual KTextEditor::Cursor documentEnd() const;
      int numVisLines() const;
      int totalCharacters() const;
-diff -uNrp kde4libs-4.0.0.orig/kate/document/katetextline.cpp kde4libs-4.0.0/kate/document/katetextline.cpp
---- kde4libs-4.0.0.orig/kate/document/katetextline.cpp	2008-01-28 18:00:43.000000000 +0700
-+++ kde4libs-4.0.0/kate/document/katetextline.cpp	2008-01-28 18:03:32.000000000 +0700
-@@ -28,6 +28,116 @@
+diff -uNrp kdelibs-4.0.0.orig/kate/document/katetextline.cpp kdelibs-4.0.0/kate/document/katetextline.cpp
+--- kdelibs-4.0.0.orig/kate/document/katetextline.cpp	2008-01-05 06:59:49.000000000 +0700
++++ kdelibs-4.0.0/kate/document/katetextline.cpp	2008-02-08 16:21:05.000000000 +0700
+@@ -28,6 +28,117 @@
  
  #include <QtCore/QRegExp>
  
@@ -164,7 +164,8 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katetextline.cpp kde4libs-4.0.0/kat
 +        //printf("About to call libthai::th_brk with str: %s",cstr.data());
 +        cache->numwbrpos = th_brk((const unsigned char*) cstr.data(), cache->wbrpos, cache->allocated);
 +        //fprintf(stderr,"libthai returns with value %d\n",cache->numwbrpos);
-+        if (cache->numwbrpos >= cache->allocated) {
++        cache->isbreakable = (int *)realloc(cache->isbreakable, len*sizeof(int));
++	if (cache->numwbrpos >= cache->allocated) {
 +            cache->allocated = len;
 +            cache->wbrpos = (int *)realloc(cache->wbrpos, cache->allocated*sizeof(int));
 +            cache->numwbrpos = th_brk((const unsigned char*) cstr.data(), cache->wbrpos, cache->allocated);
@@ -186,7 +187,7 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katetextline.cpp kde4libs-4.0.0/kat
  KateTextLine::KateTextLine ()
    : m_flags(0)
  {
-@@ -39,7 +149,7 @@ KateTextLine::KateTextLine (const QChar 
+@@ -39,7 +150,7 @@ KateTextLine::KateTextLine (const QChar 
  }
  
  KateTextLine::~KateTextLine()
@@ -195,7 +196,7 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katetextline.cpp kde4libs-4.0.0/kat
  }
  
  void KateTextLine::insertText (int pos, const QString& insText)
-@@ -49,6 +159,36 @@ void KateTextLine::insertText (int pos, 
+@@ -49,6 +160,36 @@ void KateTextLine::insertText (int pos, 
      return;
  
    m_text.insert (pos, insText);
@@ -232,7 +233,7 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katetextline.cpp kde4libs-4.0.0/kat
  }
  
  void KateTextLine::removeText (uint pos, uint delLen)
-@@ -69,6 +209,7 @@ void KateTextLine::removeText (uint pos,
+@@ -69,6 +210,7 @@ void KateTextLine::removeText (uint pos,
      delLen = textLen - pos;
  
    m_text.remove (pos, delLen);
@@ -240,9 +241,9 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katetextline.cpp kde4libs-4.0.0/kat
  }
  
  void KateTextLine::truncate(int newLen)
-diff -uNrp kde4libs-4.0.0.orig/kate/document/katetextline.h kde4libs-4.0.0/kate/document/katetextline.h
---- kde4libs-4.0.0.orig/kate/document/katetextline.h	2008-01-28 18:00:43.000000000 +0700
-+++ kde4libs-4.0.0/kate/document/katetextline.h	2008-01-28 18:02:02.000000000 +0700
+diff -uNrp kdelibs-4.0.0.orig/kate/document/katetextline.h kdelibs-4.0.0/kate/document/katetextline.h
+--- kdelibs-4.0.0.orig/kate/document/katetextline.h	2008-01-05 06:59:49.000000000 +0700
++++ kdelibs-4.0.0/kate/document/katetextline.h	2008-02-08 16:18:23.000000000 +0700
 @@ -285,6 +285,12 @@ class KateTextLine : public KShared
      void insertText (int pos, const QString& insText);
  
@@ -268,9 +269,9 @@ diff -uNrp kde4libs-4.0.0.orig/kate/document/katetextline.h kde4libs-4.0.0/kate/
      /**
       * context stack
       */
-diff -uNrp kde4libs-4.0.0.orig/kate/render/katerenderer.cpp kde4libs-4.0.0/kate/render/katerenderer.cpp
---- kde4libs-4.0.0.orig/kate/render/katerenderer.cpp	2008-01-28 18:00:43.000000000 +0700
-+++ kde4libs-4.0.0/kate/render/katerenderer.cpp	2008-01-28 18:02:02.000000000 +0700
+diff -uNrp kdelibs-4.0.0.orig/kate/render/katerenderer.cpp kdelibs-4.0.0/kate/render/katerenderer.cpp
+--- kdelibs-4.0.0.orig/kate/render/katerenderer.cpp	2008-01-05 06:59:43.000000000 +0700
++++ kdelibs-4.0.0/kate/render/katerenderer.cpp	2008-02-08 16:18:23.000000000 +0700
 @@ -755,7 +755,7 @@ void KateRenderer::layoutLine(KateLineLa
    QTextOption opt;
    opt.setFlags(QTextOption::IncludeTrailingSpaces);
@@ -280,9 +281,9 @@ diff -uNrp kde4libs-4.0.0.orig/kate/render/katerenderer.cpp kde4libs-4.0.0/kate/
  
    // Find the first strong character in the string.
    // If it is an RTL character, set the base layout direction of the string to RTL.
-diff -uNrp kde4libs-4.0.0.orig/kate/view/kateviewinternal.cpp kde4libs-4.0.0/kate/view/kateviewinternal.cpp
---- kde4libs-4.0.0.orig/kate/view/kateviewinternal.cpp	2008-01-28 18:00:43.000000000 +0700
-+++ kde4libs-4.0.0/kate/view/kateviewinternal.cpp	2008-01-28 18:02:02.000000000 +0700
+diff -uNrp kdelibs-4.0.0.orig/kate/view/kateviewinternal.cpp kdelibs-4.0.0/kate/view/kateviewinternal.cpp
+--- kdelibs-4.0.0.orig/kate/view/kateviewinternal.cpp	2008-01-05 06:59:49.000000000 +0700
++++ kdelibs-4.0.0/kate/view/kateviewinternal.cpp	2008-02-08 16:18:23.000000000 +0700
 @@ -732,7 +732,11 @@ void KateViewInternal::doReturn()
  
  void KateViewInternal::doDelete()
