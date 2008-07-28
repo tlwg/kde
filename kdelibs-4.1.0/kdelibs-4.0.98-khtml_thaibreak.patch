@@ -1,0 +1,48 @@
+diff -Nur kdelibs-4.0.98.orig/khtml/khtml_global.cpp kdelibs-4.0.98/khtml/khtml_global.cpp
+--- kdelibs-4.0.98.orig/khtml/khtml_global.cpp	2008-05-21 18:06:09.000000000 +0700
++++ kdelibs-4.0.98/khtml/khtml_global.cpp	2008-07-28 15:14:16.000000000 +0700
+@@ -97,7 +97,9 @@
+         khtml::PaintBuffer::cleanup();
+         khtml::MediaQueryEvaluator::cleanup();
+         khtml::Cache::clear();
++#if QT_VERSION < 0x040400
+         khtml::cleanup_thaibreaks();
++#endif
+         khtml::ArenaFinish();
+     }
+     else
+diff -Nur kdelibs-4.0.98.orig/khtml/rendering/break_lines.h kdelibs-4.0.98/khtml/rendering/break_lines.h
+--- kdelibs-4.0.98.orig/khtml/rendering/break_lines.h	2008-05-21 18:06:02.000000000 +0700
++++ kdelibs-4.0.98/khtml/rendering/break_lines.h	2008-07-28 15:07:09.000000000 +0700
+@@ -3,6 +3,10 @@
+ 
+ #include <QtCore/QString>
+ 
++#if QT_VERSION >= 0x040400
++#include <QtGui/QTextLayout>
++#endif
++
+ namespace khtml {
+ 
+     /*
+@@ -130,7 +134,20 @@
+ 		// 0e00 - 0e7f == Thai
+ 		if ( c->cell() < 0x80 ) {
+ 		    // consult libthai
++#if QT_VERSION >= 0x040400
++		    static const QChar *current_str;
++		    static QTextLayout textLayout;
++		    int pos_check = -1;
++		    if ( current_str != str ) {
++		        textLayout.setText( QString::fromRawData(str, len) );
++		        current_str = str;
++		    }
++		    pos_check = textLayout.nextCursorPosition( pos, QTextLayout::SkipWords );
++		    pos_check = textLayout.previousCursorPosition( pos_check, QTextLayout::SkipWords );
++		    return ( pos == pos_check );
++#else
+ 		    return isBreakableThai(str, pos, len);
++#endif
+ 		} else
+ 		    return false;
+ 	    }
