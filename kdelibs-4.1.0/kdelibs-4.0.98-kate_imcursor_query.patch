@@ -1,0 +1,13 @@
+--- kdelibs-4.0.98.orig/kate/view/kateviewinternal.cpp	2008-06-26 08:33:20.000000000 +0700
++++ kdelibs-4.0.98/kate/view/kateviewinternal.cpp	2008-07-29 21:53:47.000000000 +0700
+@@ -3508,7 +3508,9 @@
+       if (m_imPreedit)
+         return cursorToCoordinate(m_imPreedit->start(), true, false);
+       else
+-        return cursorCoordinates(false);
++        // Needed column position for XIM , NOT QPoint !
++        return m_cursor.column();
++        //return cursorCoordinates(false);
+ 
+     case Qt::ImSurroundingText:
+       if (KateTextLine::Ptr l = textLine(m_cursor.line()))
