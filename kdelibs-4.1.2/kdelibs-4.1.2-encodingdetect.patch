@@ -1,0 +1,13 @@
+diff -Nur kdelibs-4.1.2.orig/kdecore/localization/kencodingdetector.cpp kdelibs-4.1.2/kdecore/localization/kencodingdetector.cpp
+--- kdelibs-4.1.2.orig/kdecore/localization/kencodingdetector.cpp	2008-08-28 15:08:22.000000000 +0700
++++ kdelibs-4.1.2/kdecore/localization/kencodingdetector.cpp	2008-10-11 02:58:22.000000000 +0700
+@@ -1023,6 +1023,9 @@
+                 if( (pos = str.indexOf("=", pos)) == -1)
+                     continue;
+ 
++                // skip '='
++                ++pos;
++
+                 // skip whitespace before encoding itself
+                 while (pos < (int)str.length() && str[pos] <= ' ')
+                     ++pos;
