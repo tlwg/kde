@@ -1,7 +1,7 @@
-diff -uNrp kdebase-kde4-4.1.0.orig/apps/konsole/src/Screen.cpp kdebase-kde4-4.1.0/apps/konsole/src/Screen.cpp
---- kdebase-kde4-4.1.0.orig/apps/konsole/src/Screen.cpp	2008-06-18 19:41:21.000000000 +0700
-+++ kdebase-kde4-4.1.0/apps/konsole/src/Screen.cpp	2008-08-26 11:34:21.000000000 +0700
-@@ -671,6 +671,42 @@ void Screen::displayCharacter(unsigned s
+diff -uNr kdebase-4.1.2.org/apps/konsole/src/Screen.cpp kdebase-4.1.2/apps/konsole/src/Screen.cpp
+--- kdebase-4.1.2.org/apps/konsole/src/Screen.cpp	2008-06-18 19:41:21.000000000 +0700
++++ kdebase-4.1.2/apps/konsole/src/Screen.cpp	2008-11-10 18:29:56.000000000 +0700
+@@ -671,6 +671,46 @@
  
    int w = konsole_wcwidth(c);
  
@@ -9,34 +9,38 @@ diff -uNrp kdebase-kde4-4.1.0.orig/apps/konsole/src/Screen.cpp kdebase-kde4-4.1.
 +  if (w == 0 && cuX == 0 && QChar::category(c) == QChar::Mark_NonSpacing)
 +    w = 1;
 +
-+  //Set CharSequence
++  // Character sequence to store combining characters
++  // Maximum 5 characters in one cell (OK for Thai and any other languages that we know of)
 +  const int MAX_COMBINING_CHARS = 5;
 +  ushort u_char_combind[MAX_COMBINING_CHARS];
 +
 +  if (w == 0 && cuX > 0 && QChar::category(c) == QChar::Mark_NonSpacing) {
 +    if (screenLines[cuY][cuX-1].rendition & RE_EXTENDED_CHAR)
 +    {
-+        // sequence of characters
++        // the previous character is already stored in a chareacter sequence
++	// append to this if not yet exceeding the limit
 +        ushort extendedCharLength = 0;
-+        ushort* chars = ExtendedCharTable::instance
-+                            .lookupExtendedChar(screenLines[cuY][cuX-1].charSequence,extendedCharLength);
-+        if (extendedCharLength > 5)
-+            return;
++        ushort* chars = ExtendedCharTable::instance.lookupExtendedChar(screenLines[cuY][cuX-1].charSequence,extendedCharLength);
++
++        if (extendedCharLength > MAX_COMBINING_CHARS)
++            return; 
++
 +        for ( int index = 0 ; index < extendedCharLength ; index++ )            
 +            u_char_combind[index] = chars[index];
 +
 +        u_char_combind[extendedCharLength] = c;
 +        Character& th_char = screenLines[cuY][cuX-1];
-+        th_char.charSequence = ExtendedCharTable::instance.createExtendedChar(u_char_combind    ,extendedCharLength+1);
++        th_char.charSequence = ExtendedCharTable::instance.createExtendedChar(u_char_combind, extendedCharLength+1);
 +    }
 +    else
 +    {
++	// put in a new chareacter sequence
 +        Character& th_char = screenLines[cuY][cuX-1];
 +        
 +        th_char.rendition |= RE_EXTENDED_CHAR;
 +        u_char_combind[0] = (ushort)screenLines[cuY][cuX-1].character;
 +        u_char_combind[1] = c;        
-+        th_char.charSequence = ExtendedCharTable::instance.createExtendedChar(u_char_combind    ,2); 
++        th_char.charSequence = ExtendedCharTable::instance.createExtendedChar(u_char_combind, 2); 
 +    }
 +    return;            
 +  }
@@ -44,46 +48,49 @@ diff -uNrp kdebase-kde4-4.1.0.orig/apps/konsole/src/Screen.cpp kdebase-kde4-4.1.
    if (w <= 0)
       return;
  
-diff -uNrp kdebase-kde4-4.1.0.orig/apps/konsole/src/TerminalCharacterDecoder.cpp kdebase-kde4-4.1.0/apps/konsole/src/TerminalCharacterDecoder.cpp
---- kdebase-kde4-4.1.0.orig/apps/konsole/src/TerminalCharacterDecoder.cpp	2008-06-03 16:34:24.000000000 +0700
-+++ kdebase-kde4-4.1.0/apps/konsole/src/TerminalCharacterDecoder.cpp	2008-08-26 11:34:51.000000000 +0700
-@@ -99,10 +99,20 @@ void PlainTextDecoder::decodeLine(const 
+diff -uNr kdebase-4.1.2.org/apps/konsole/src/TerminalCharacterDecoder.cpp kdebase-4.1.2/apps/konsole/src/TerminalCharacterDecoder.cpp
+--- kdebase-4.1.2.org/apps/konsole/src/TerminalCharacterDecoder.cpp	2008-06-03 16:34:24.000000000 +0700
++++ kdebase-4.1.2/apps/konsole/src/TerminalCharacterDecoder.cpp	2008-11-10 18:27:12.000000000 +0700
+@@ -99,11 +99,23 @@
                  outputCount--;
          }
      }
 -	
--    for (int i=0;i<outputCount;)
++
+     for (int i=0;i<outputCount;)
 -	{
 -		plainText.append( QChar(characters[i].character) );
-+
-+    for (int i=0;i<outputCount;i++)
+-        i += qMax(1,konsole_wcwidth(characters[i].character));
 +        {
++            // in case of combining character (character sequence), decode it first
 +            if (characters[i].rendition & RE_EXTENDED_CHAR)
 +            {
 +                ushort extendedCharLength = 0;
-+                ushort* chars = ExtendedCharTable::instance
-+                                .lookupExtendedChar(characters[i].charSequence,extendedCharLength);
++                ushort* chars = ExtendedCharTable::instance.lookupExtendedChar(characters[i].charSequence,extendedCharLength);
 +
 +                for (int j = 0;j<extendedCharLength;j++)
 +                   plainText.append(QChar(chars[j]));
 +
-+            } else
++		i++;
++            } else {
 +                plainText.append( QChar(characters[i].character) );
-         i += qMax(1,konsole_wcwidth(characters[i].character));
++            	i += qMax(1,konsole_wcwidth(characters[i].character));
++	    }
  	}
  	*_output << plainText;
-diff -uNrp kdebase-kde4-4.1.0.orig/apps/konsole/src/TerminalDisplay.cpp kdebase-kde4-4.1.0/apps/konsole/src/TerminalDisplay.cpp
---- kdebase-kde4-4.1.0.orig/apps/konsole/src/TerminalDisplay.cpp	2008-06-03 16:34:24.000000000 +0700
-+++ kdebase-kde4-4.1.0/apps/konsole/src/TerminalDisplay.cpp	2008-08-26 11:35:27.000000000 +0700
-@@ -1353,6 +1353,7 @@ void TerminalDisplay::drawContents(QPain
+ }
+diff -uNr kdebase-4.1.2.org/apps/konsole/src/TerminalDisplay.cpp kdebase-4.1.2/apps/konsole/src/TerminalDisplay.cpp
+--- kdebase-4.1.2.org/apps/konsole/src/TerminalDisplay.cpp	2008-06-03 16:34:24.000000000 +0700
++++ kdebase-4.1.2/apps/konsole/src/TerminalDisplay.cpp	2008-11-10 18:25:44.000000000 +0700
+@@ -1353,6 +1353,7 @@
               _image[loc(x+len,y)].foregroundColor == currentForeground &&
               _image[loc(x+len,y)].backgroundColor == currentBackground &&
               _image[loc(x+len,y)].rendition == currentRendition &&
-+             _image[loc(x+len,y)].rendition & ~RE_EXTENDED_CHAR &&  //No CharSequence
++             _image[loc(x+len,y)].rendition & ~RE_EXTENDED_CHAR &&  // Skip CharSequence, leave it to automatic font anchoring / character cell composing
               (_image[ qMin(loc(x+len,y)+1,_imageSize) ].character == 0) == doubleWidth &&
               isLineChar( c = _image[loc(x+len,y)].character) == lineDraw) // Assignment!
        {
-@@ -2451,19 +2452,41 @@ QVariant TerminalDisplay::inputMethodQue
+@@ -2451,19 +2452,41 @@
                  return font();
              break;
          case Qt::ImCursorPosition:
