@@ -1,0 +1,323 @@
+diff -Nur amarok-2.0.orig//src/meta/MetaUtility.cpp amarok-2.0/src/meta/MetaUtility.cpp
+--- amarok-2.0.orig//src/meta/MetaUtility.cpp	2008-12-05 17:01:29.000000000 +0700
++++ amarok-2.0/src/meta/MetaUtility.cpp	2008-12-21 10:29:12.000000000 +0700
+@@ -25,6 +25,8 @@
+ 
+ #include <QChar>
+ #include <QFile>
++#include <QLocale>
++#include <QTextCodec>
+ 
+ #include <klocale.h>
+ #include <kio/global.h>
+@@ -34,6 +36,7 @@
+ #include <tlist.h>
+ #include <tstring.h>
+ #include <flacfile.h>
++#include <id3v1tag.h>
+ #include <id3v2tag.h>
+ #include <mpegfile.h>
+ #include <oggfile.h>
+@@ -49,6 +52,7 @@
+ #include <textidentificationframe.h>
+ #include <xiphcomment.h>
+ 
++        static QString detectedEncodingStr = "NOTINIT";
+ 
+         static const QString XESAM_ALBUM          = "http://freedesktop.org/standards/xesam/1.0/core#album";
+         static const QString XESAM_ARTIST         = "http://freedesktop.org/standards/xesam/1.0/core#artist";
+@@ -198,51 +202,103 @@
+     // This method could be called when there are only non-tag attributes to change, like score and rating
+     bool shouldSave = false;
+ 
++    // get ID3v1 tag, if posibles.
++    TagLib::Tag *tagV1 = NULL;
++    QTextCodec *codec = NULL;
++    QString convString;
++
++    if ( TagLib::MPEG::File *file = dynamic_cast<TagLib::MPEG::File *>( fileref.file() ) )
++    {
++        if( file->ID3v1Tag() )  tagV1 = file->ID3v1Tag();
++    }
++    else if ( TagLib::FLAC::File *file = dynamic_cast<TagLib::FLAC::File *>( fileref.file() ) )
++    {
++        if( file->ID3v1Tag() )  tagV1 = file->ID3v1Tag();
++    }
++
++    // if has ID3v1 tag, let's try to convert UTF-8 string to local encoding (as Latin-1).
++    if ( tagV1 != NULL ) {
++        QString enc = Meta::getEncodingForBaseLocale( QLocale::system().name().section('.', 0, 0) );
++        if (!enc.isEmpty()) {
++            codec = QTextCodec::codecForName( enc.toLatin1() );
++            QTextCodec::setCodecForCStrings( codec );
++        }
++    }
++
+     if( changes.contains( Meta::Field::TITLE ) )
+     {
+         shouldSave = true;
+-        const TagLib::String title = Qt4QStringToTString( changes.value( Meta::Field::TITLE ).toString() );
++        convString = changes.value( Meta::Field::TITLE ).toString();
++        const TagLib::String title = Qt4QStringToTString( convString );
+         tag->setTitle( title );
++        if (codec && tagV1) {
++            const TagLib::String titleV1( (const char*)codec->fromUnicode( convString ) );
++            tagV1->setTitle( titleV1 );
++        }
+     }
+ 
+     if( changes.contains( Meta::Field::ALBUM ) )
+     {
+         shouldSave = true;
+-        const TagLib::String album = Qt4QStringToTString( changes.value( Meta::Field::ALBUM ).toString() );
++        convString = changes.value( Meta::Field::ALBUM ).toString();
++        const TagLib::String album = Qt4QStringToTString( convString );
+         tag->setAlbum( album );
++        if (codec && tagV1) {
++            const TagLib::String albumV1( (const char*)codec->fromUnicode( convString ) );
++            tagV1->setAlbum( albumV1 );
++        }
+     }
+ 
+     if( changes.contains( Meta::Field::ARTIST ) )
+     {
+         shouldSave = true;
+-        const TagLib::String artist = Qt4QStringToTString( changes.value( Meta::Field::ARTIST ).toString() );
++        convString = changes.value( Meta::Field::ARTIST ).toString();
++        const TagLib::String artist = Qt4QStringToTString( convString );
+         tag->setArtist( artist );
++        if (codec && tagV1) {
++            const TagLib::String artistV1( (const char*)codec->fromUnicode( convString ) );
++            tagV1->setArtist( artistV1 );
++        }
+     }
+ 
+     if( changes.contains( Meta::Field::COMMENT ) )
+     {
+         shouldSave = true;
+-        const TagLib::String comment = Qt4QStringToTString( changes.value( Meta::Field::COMMENT ).toString() );
++        convString = changes.value( Meta::Field::COMMENT ).toString();
++        const TagLib::String comment = Qt4QStringToTString( convString );
+         tag->setComment( comment );
++        if (codec && tagV1) {
++            const TagLib::String commentV1( (const char*)codec->fromUnicode( convString ) );
++            tagV1->setComment( commentV1 );
++        }
+     }
+ 
+     if( changes.contains( Meta::Field::GENRE ) )
+     {
+         shouldSave = true;
+-        const TagLib::String genre = Qt4QStringToTString( changes.value( Meta::Field::GENRE ).toString() );
++        convString = changes.value( Meta::Field::GENRE ).toString();
++        const TagLib::String genre = Qt4QStringToTString( convString );
+         tag->setGenre( genre );
++        if (codec && tagV1) {
++            const TagLib::String genreV1( (const char*)codec->fromUnicode( convString ) );
++            tagV1->setGenre( genreV1 );
++        }
+     }
+     if( changes.contains( Meta::Field::YEAR ) )
+     {
+         shouldSave = true;
+         const unsigned int year = changes.value( Meta::Field::YEAR ).toUInt();
+         tag->setYear( year );
++        if (tagV1)
++            tagV1->setYear( year );
+     }
+     if( changes.contains( Meta::Field::TRACKNUMBER ) )
+     {
+         shouldSave = true;
+         const unsigned int trackNumber = changes.value( Meta::Field::TRACKNUMBER ).toUInt();
+         tag->setTrack( trackNumber );
++        if (tagV1)
++            tagV1->setTrack( trackNumber );
+     }
+     if ( TagLib::MPEG::File *file = dynamic_cast<TagLib::MPEG::File *>( fileref.file() ) )
+     {
+@@ -498,3 +554,130 @@
+     }
+     return "if you can see this, then that's a bad sign.";
+ }
++
++
++/*
++ * alternative encoding stuff
++ */
++QString Meta::getEncodingForBaseLocale(const QString &lcs)
++{
++    QString encodingStr = "";
++    QString lang = lcs.section( '_', 0, 0 );
++    QString atTail = lcs.section( '@', 1, 1 );
++
++    if (lcs.isEmpty())
++        return encodingStr;
++
++    if ( (atTail.isEmpty() &&
++         (lang=="de" || lang=="en" || lang=="es" || lcs=="br_FR" || lcs=="ca_ES")) ||
++         lcs=="aa_DJ" || lcs=="af_ZA" || lcs=="da_DK" || lang=="fi" || lang=="fo" ||
++         lang=="fr" || lang=="ga" || lang=="gl" || lcs=="gv_GB" || lang=="id" ||
++         lang=="is" || lang=="it" || lang=="kl" || lang=="kw" || lang=="ms" || lang=="nb" ||
++         lang=="nl" || lang=="nn" || lang=="no" || lang=="oc" || lcs=="om_KE" || lang=="pt" ||
++         lang=="so" || lang=="sq" || lang=="st" || lang=="sv" || lang=="tl" || lang=="uz" ||
++         lang=="wa" || lang=="xh" || lang=="zu"
++       )
++        encodingStr = "ISO-8859-1";
++    else if (lcs=="an_ES" || lcs=="ast_ES" || lcs=="ca_AD" || lcs=="ca_FR" || lcs=="ca_IT" ||
++             lcs=="gd_GB" || lcs=="mg_MG")
++        encodingStr = "ISO-8859-15";
++    else if (!atTail.isEmpty() && atTail.toLower()=="euro")
++        encodingStr = "ISO-8859-15";
++
++    if (lcs=="bs_BA" || lcs=="cs_CZ" || lcs=="hr_HR" || lcs=="hsb_DE" || lcs=="hu_HU" ||
++        lcs=="pl_PL" || lcs=="ro_RO" || lcs=="sh_YU" || lcs=="sk_SK" || lcs=="sl_SI")
++        encodingStr = "ISO-8859-2";
++    if (lcs == "mt_MT")
++        encodingStr = "ISO-8859-3";
++    if (lcs == "mk_MK")
++        encodingStr = "ISO-8859-5";
++    if (lang == "ar")
++        encodingStr = "ISO-8859-6";
++    if (lcs=="el_CY" || lcs=="el_GR")
++        encodingStr = "ISO-8859-7";
++    if (lcs=="he_IL" || lcs=="iw_IL")
++        encodingStr = "ISO-8859-8";
++    if (lcs=="ku_TR" || lcs=="tr_CY" || lcs=="tr_TR")
++        encodingStr = "ISO-8859-9";
++    if (lcs == "lg_UG")
++        encodingStr = "ISO-8859-10";
++    if (lcs=="lt_LT" || lcs=="lv_LV" || lcs=="mi_NZ")
++        encodingStr = "ISO-8859-13";
++    if (lcs == "cy_GB")
++        encodingStr = "ISO-8859-14";
++    if (lcs == "th_TH")
++        encodingStr = "TIS-620";
++    if (lcs == "tg_TJ")
++        encodingStr = "KOI8-T"; // NOT SUPPORT
++    if (lcs=="ru_UA" || lcs=="uk_UA")
++        encodingStr = "KOI8-U";
++    if (lcs == "ru_RU")
++        encodingStr = "KOI8-R";
++    if (lcs == "kk_KZ")
++        encodingStr = "PT154"; // NOT SUPPORT
++    if (lcs=="be_BY" || lcs=="bg_BG")
++        encodingStr = "CP1251";
++    if (lcs == "ka_GE")
++        encodingStr = "GEORGIAN-PS"; // NOT SUPPORT
++    if (lcs == "vi_VN")
++        encodingStr = "TCVN5712-1"; // NOT SUPPORT
++    if (lcs == "ko_KR")
++        encodingStr = "EUC-KR";
++    if (lcs == "hy_AM")
++        encodingStr = "ARMSCII-8";
++    if (lcs == "yi_US")
++        encodingStr = "CP1255";
++    if (lcs == "zh_HK")
++        encodingStr = "BIG5-HKSCS";
++    if (lcs == "zh_TW")
++        encodingStr = "BIG5";
++    if (lcs == "zh_CN" || lcs == "zh_SG")
++        encodingStr = "GB2312";
++
++    return encodingStr;
++
++#if 0
++    // WAITING FOR CHOOSING THE MOST USING ENCODING OF FOLLOWINGS:
++    if (lcs == "mk_MK" || lcs =="ru_RU")
++        encodingStr = "ISO-8859-5";
++    if (lcs == "ru_RU.koi8r")
++        encodingStr = "KOI8-R";
++    if (lcs == "zh_HK")
++        encodingStr = "BIG5-HKSCS";
++    if (lcs == "zh_TW")
++        encodingStr = "BIG5";
++    if (lcs == "zh_CN" || lcs == "zh_SG")
++        encodingStr = "GB2312";
++    if (lcs == "zh_CN.gbk" || lcs=="zh_SG.gbk")
++        encodingStr = "GBK";
++    if (lcs == "zh_TW.euctw")
++        encodingStr = "EUC-TW";
++    if (lcs == "zh_CN.gb18030")
++        encodingStr = "GB18030";
++    if (lcs == "ja_JP.sjis")
++        encodingStr = "SHIFT_JIS";
++    if (lcs == "ja_JP.shiftjisx0213")
++        encodingStr = "SHIFT_JISX0213";
++    if (lcs == "ja_JP.eucjp")
++        encodingStr = "EUC-JP";
++#endif
++}
++
++QString Meta::unicodeMetaString(const QString &metaStr)
++{
++    QString result = metaStr;
++    if ( metaStr.isEmpty() )
++        return metaStr;
++
++    if ( detectedEncodingStr == "NOTINIT" )
++        detectedEncodingStr = getEncodingForBaseLocale( QLocale::system().name().section('.', 0, 0) );
++    if ( detectedEncodingStr.isEmpty() )
++        return result;
++
++    QTextCodec *codec = QTextCodec::codecForName( detectedEncodingStr.toLatin1() );
++    if ( codec && !codec->canEncode( result ) ) {
++        result = codec->toUnicode( result.toLatin1() );
++        return result;
++    }
++    return result;
++}
+diff -Nur amarok-2.0.orig//src/meta/MetaUtility.h amarok-2.0/src/meta/MetaUtility.h
+--- amarok-2.0.orig//src/meta/MetaUtility.h	2008-12-05 17:01:29.000000000 +0700
++++ amarok-2.0/src/meta/MetaUtility.h	2008-12-21 10:29:05.000000000 +0700
+@@ -78,6 +78,10 @@
+     AMAROK_EXPORT QString prettyBitrate( int bitrate );
+ 
+     AMAROK_EXPORT QString prettyRating( int rating );
++
++    AMAROK_EXPORT QString getEncodingForBaseLocale(const QString &lcs);
++    AMAROK_EXPORT QString unicodeMetaString(const QString &metaStr);
++
+ }
+ 
+ #endif
+diff -Nur amarok-2.0.orig//src/meta/file/File_p.h amarok-2.0/src/meta/file/File_p.h
+--- amarok-2.0.orig//src/meta/file/File_p.h	2008-12-05 17:01:29.000000000 +0700
++++ amarok-2.0/src/meta/file/File_p.h	2008-12-21 00:21:19.000000000 +0700
+@@ -184,6 +184,14 @@
+         }
+         else if ( file->ID3v1Tag() )
+         {
++            if (
++                m_data.title    != Meta::unicodeMetaString( m_data.title )   ||
++                m_data.artist   != Meta::unicodeMetaString( m_data.artist )  ||
++                m_data.album    != Meta::unicodeMetaString( m_data.album )   ||
++                m_data.comment  != Meta::unicodeMetaString( m_data.comment )
++               )
++                goto bypass;
++            
+             TagLib::String metaData = tag->title() + tag->artist() + tag->album() + tag->comment();
+             const char* buf = metaData.toCString();
+             size_t len = strlen( buf );
+@@ -260,6 +268,22 @@
+         }
+     }
+ 
++bypass:
++    /* Convert to Unicode because the Mozilla's detector should not work correctly */
++    QString cnvString;
++    if ( m_data.title    != (cnvString = Meta::unicodeMetaString( m_data.title )) )
++        m_data.title      = cnvString;
++    if ( m_data.artist   != (cnvString = Meta::unicodeMetaString( m_data.artist )) )
++        m_data.artist     = cnvString;
++    if (m_data.album     != (cnvString = Meta::unicodeMetaString( m_data.album )) )
++        m_data.album      = cnvString;
++    if ( m_data.comment  != (cnvString = Meta::unicodeMetaString( m_data.comment )) )
++        m_data.comment    = cnvString;
++    if ( m_data.composer != (cnvString = Meta::unicodeMetaString( m_data.composer )) )
++        m_data.composer   = cnvString;
++    if ( m_data.genre    != (cnvString = Meta::unicodeMetaString( m_data.genre )) )
++        m_data.genre      = cnvString;
++
+     if( !disc.isEmpty() )
+     {
+         int i = disc.indexOf( '/' );
