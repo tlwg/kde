@@ -1,0 +1,303 @@
+diff -Nur amarok-1.4.10.orig/amarok/src/metabundle.cpp amarok-1.4.10/amarok/src/metabundle.cpp
+--- amarok-1.4.10.orig/amarok/src/metabundle.cpp	2008-08-14 04:21:51.000000000 +0700
++++ amarok-1.4.10/amarok/src/metabundle.cpp	2008-10-17 22:15:10.000000000 +0700
+@@ -16,6 +16,8 @@
+ #include <sys/types.h>
+ #include <fcntl.h>
+ 
++#include <qtextcodec.h>
++
+ #include "amarok.h"
+ #include "amarokconfig.h"
+ #include "debug.h"
+@@ -63,6 +65,9 @@
+ #include "metabundle.h"
+ #include "podcastbundle.h"
+ 
++static QString getEncodingForBaseLocale(const QString &lcs);
++static QString unicodeMetaString(const QString &metaStr);
++static QString detectedEncodingStr = "NOTINIT";
+ 
+ namespace Amarok {
+     KURL detachedKURL( const KURL &url ) {
+@@ -292,6 +297,8 @@
+         m_title  = title;
+         m_artist = streamName; //which is sort of correct..
+     }
++    m_title  = unicodeMetaString( m_title );
++    m_artist = unicodeMetaString( m_artist );
+ }
+ 
+ MetaBundle::MetaBundle( const MetaBundle &bundle )
+@@ -313,13 +320,13 @@
+ MetaBundle::operator=( const MetaBundle& bundle )
+ {
+     m_url = bundle.m_url;
+-    m_title = bundle.m_title;
+-    m_artist = bundle.m_artist;
+-    m_albumArtist = bundle.m_albumArtist;
+-    m_composer = bundle.m_composer;
+-    m_album = bundle.m_album;
+-    m_comment = bundle.m_comment;
+-    m_genre = bundle.m_genre;
++    m_title = unicodeMetaString( bundle.m_title );
++    m_artist = unicodeMetaString( bundle.m_artist );
++    m_albumArtist = unicodeMetaString( bundle.m_albumArtist );
++    m_composer = unicodeMetaString( bundle.m_composer );
++    m_album = unicodeMetaString( bundle.m_album );
++    m_comment = unicodeMetaString( bundle.m_comment );
++    m_genre = unicodeMetaString( bundle.m_genre );
+     m_streamName = bundle.m_streamName;
+     m_streamUrl = bundle.m_streamUrl;
+     m_uniqueId = bundle.m_uniqueId;
+@@ -466,6 +473,14 @@
+         m_bitrate = m_length = m_sampleRate = m_filesize = Undetermined;
+         m_isValidMedia = false;
+     }
++
++    m_title       = unicodeMetaString( m_title );
++    m_artist      = unicodeMetaString( m_artist );
++    m_albumArtist = unicodeMetaString( m_albumArtist );
++    m_composer    = unicodeMetaString( m_composer );
++    m_album       = unicodeMetaString( m_album );
++    m_comment     = unicodeMetaString( m_comment );
++    m_genre       = unicodeMetaString( m_genre );
+ }
+ 
+ void
+@@ -1471,6 +1486,20 @@
+     if ( f && !f->isNull() )
+     {
+         TagLib::Tag * t = f->tag();
++
++        // get ID3v1 tag, if posibles.
++        TagLib::ID3v1::Tag *tagv1 = NULL;
++
++        if ( TagLib::MPEG::File *file = dynamic_cast<TagLib::MPEG::File *>( f->file() ) ) {
++            if( file->ID3v1Tag() )  tagv1 = file->ID3v1Tag();
++        }
++        else if ( TagLib::FLAC::File *file = dynamic_cast<TagLib::FLAC::File *>( f->file() ) ) {
++            if( file->ID3v1Tag() )  tagv1 = file->ID3v1Tag();
++        }
++        else if ( TagLib::MPC::File *file = dynamic_cast<TagLib::MPC::File *>( f->file() ) ) {
++            if( file->ID3v1Tag() )  tagv1 = file->ID3v1Tag();
++        }
++
+         if ( t ) { // f.tag() can return null if the file couldn't be opened for writing
+             t->setTitle( QStringToTString( title().stripWhiteSpace() ) );
+             t->setArtist( QStringToTString( artist().string().stripWhiteSpace() ) );
+@@ -1480,6 +1509,29 @@
+             t->setComment( QStringToTString( comment().string().stripWhiteSpace() ) );
+             t->setGenre( QStringToTString( genre().string().stripWhiteSpace() ) );
+ 
++            // if has ID3v1 tag, let's try to convert UTF-8 string to local encoding (as Latin-1).
++            if ( tagv1 != NULL ) {
++                QString enc = getEncodingForBaseLocale( QString(QTextCodec::locale()).section('.', 0, 0) );
++                QTextCodec *codec = QTextCodec::codecForName( enc.latin1() );
++                if ( codec ) {
++                    QString tempStr;
++
++                    tagv1->setTrack( track() );
++                    tagv1->setYear( year() );
++
++                    tempStr = codec->fromUnicode( title().stripWhiteSpace() );
++                        tagv1->setTitle( QStringToTString( tempStr ) );
++                    tempStr = codec->fromUnicode( artist().string().stripWhiteSpace() );
++                        tagv1->setArtist( QStringToTString( tempStr ) );
++                    tempStr = codec->fromUnicode( album().string().stripWhiteSpace() );
++                        tagv1->setAlbum( QStringToTString( tempStr ) );
++                    tempStr = codec->fromUnicode( comment().string().stripWhiteSpace() );
++                        tagv1->setComment( QStringToTString( tempStr ) );
++                    tempStr = codec->fromUnicode( genre().string().stripWhiteSpace() );
++                        tagv1->setGenre( QStringToTString( tempStr ) );
++                }
++            }
++
+             if ( hasExtendedMetaInformation() )
+             {
+                 setExtendedTag( f->file(), albumArtistTag, albumArtist() );
+@@ -1763,19 +1815,19 @@
+ }
+ 
+ void MetaBundle::setTitle( const QString &title )
+-{ aboutToChange( Title ); m_title = title; reactToChange( Title ); }
++{ aboutToChange( Title ); m_title = unicodeMetaString( title ); reactToChange( Title ); }
+ 
+ void MetaBundle::setArtist( const AtomicString &artist )
+-{ aboutToChange( Artist ); m_artist = artist; reactToChange( Artist ); }
++{ aboutToChange( Artist ); m_artist = unicodeMetaString( artist ); reactToChange( Artist ); }
+ 
+ void MetaBundle::setAlbum( const AtomicString &album )
+-{ aboutToChange( Album ); m_album = album; reactToChange( Album ); }
++{ aboutToChange( Album ); m_album = unicodeMetaString( album ); reactToChange( Album ); }
+ 
+ void MetaBundle::setComment( const AtomicString &comment )
+-{ aboutToChange( Comment ); m_comment = comment; reactToChange( Comment ); }
++{ aboutToChange( Comment ); m_comment = unicodeMetaString( comment ); reactToChange( Comment ); }
+ 
+ void MetaBundle::setGenre( const AtomicString &genre )
+-{ aboutToChange( Genre ); m_genre = genre; reactToChange( Genre ); }
++{ aboutToChange( Genre ); m_genre = unicodeMetaString( genre ); reactToChange( Genre ); }
+ 
+ void MetaBundle::setYear( int year)
+ { aboutToChange( Year ); m_year = year; reactToChange( Year ); }
+@@ -1820,7 +1872,7 @@
+ { aboutToChange( Composer ); m_composer = composer; reactToChange( Composer ); }
+ 
+ void MetaBundle::setAlbumArtist( const AtomicString &albumArtist )
+-{ aboutToChange( AlbumArtist ); m_albumArtist = albumArtist; reactToChange( AlbumArtist ); }
++{ aboutToChange( AlbumArtist ); m_albumArtist = unicodeMetaString( albumArtist ); reactToChange( AlbumArtist ); }
+ 
+ void MetaBundle::setPlayCount( int playcount )
+ { aboutToChange( PlayCount ); m_playCount = playcount; reactToChange( PlayCount ); }
+@@ -1845,13 +1897,13 @@
+     //m_url.detach();
+     m_url = Amarok::detachedKURL( m_url );
+ 
+-    m_title = QDeepCopy<QString>(m_title);
+-    m_artist = m_artist.deepCopy();
+-    m_albumArtist = m_albumArtist.deepCopy();
+-    m_album = m_album.deepCopy();
+-    m_comment = m_comment.deepCopy();
+-    m_composer = m_composer.deepCopy();
+-    m_genre = m_genre.deepCopy();
++    m_title = unicodeMetaString( QDeepCopy<QString>(m_title) );
++    m_artist = unicodeMetaString( m_artist.deepCopy() );
++    m_albumArtist = unicodeMetaString( m_albumArtist.deepCopy() );
++    m_album = unicodeMetaString( m_album.deepCopy() );
++    m_comment = unicodeMetaString( m_comment.deepCopy() );
++    m_composer = unicodeMetaString( m_composer.deepCopy() );
++    m_genre = unicodeMetaString( m_genre.deepCopy() );
+     m_streamName = QDeepCopy<QString>(m_streamName);
+     m_streamUrl = QDeepCopy<QString>(m_streamUrl);
+ 
+@@ -1881,3 +1933,129 @@
+     m_type = QDeepCopy<QString>(m_type);
+     m_guid = QDeepCopy<QString>(m_guid);
+ }
++
++/*
++ * alternative encoding stuff
++ */
++QString getEncodingForBaseLocale(const QString &lcs)
++{
++    QString encodingStr = "";
++    QString lang = lcs.section( '_', 0, 0 );
++    QString atTail = lcs.section( '@', 1, 1 );
++
++    if (lcs.isEmpty())
++        return encodingStr;
++
++    if ( (atTail.isEmpty() && 
++         (lang=="de" || lang=="en" || lang=="es" || lcs=="br_FR" || lcs=="ca_ES")) ||
++         lcs=="aa_DJ" || lcs=="af_ZA" || lcs=="da_DK" || lang=="fi" || lang=="fo" ||
++         lang=="fr" || lang=="ga" || lang=="gl" || lcs=="gv_GB" || lang=="id" ||
++         lang=="is" || lang=="it" || lang=="kl" || lang=="kw" || lang=="ms" || lang=="nb" ||
++         lang=="nl" || lang=="nn" || lang=="no" || lang=="oc" || lcs=="om_KE" || lang=="pt" ||
++         lang=="so" || lang=="sq" || lang=="st" || lang=="sv" || lang=="tl" || lang=="uz" ||
++         lang=="wa" || lang=="xh" || lang=="zu"
++       )
++        encodingStr = "ISO-8859-1";
++    else if (lcs=="an_ES" || lcs=="ast_ES" || lcs=="ca_AD" || lcs=="ca_FR" || lcs=="ca_IT" ||
++             lcs=="gd_GB" || lcs=="mg_MG")
++        encodingStr = "ISO-8859-15";
++    else if (!atTail.isEmpty() && atTail.lower()=="euro")
++        encodingStr = "ISO-8859-15";
++
++    if (lcs=="bs_BA" || lcs=="cs_CZ" || lcs=="hr_HR" || lcs=="hsb_DE" || lcs=="hu_HU" ||
++        lcs=="pl_PL" || lcs=="ro_RO" || lcs=="sh_YU" || lcs=="sk_SK" || lcs=="sl_SI")
++        encodingStr = "ISO-8859-2";
++    if (lcs == "mt_MT")
++        encodingStr = "ISO-8859-3";
++    if (lcs == "mk_MK")
++        encodingStr = "ISO-8859-5";
++    if (lang == "ar")
++        encodingStr = "ISO-8859-6";
++    if (lcs=="el_CY" || lcs=="el_GR")
++        encodingStr = "ISO-8859-7";
++    if (lcs=="he_IL" || lcs=="iw_IL")
++        encodingStr = "ISO-8859-8";
++    if (lcs=="ku_TR" || lcs=="tr_CY" || lcs=="tr_TR")
++        encodingStr = "ISO-8859-9";
++    if (lcs == "lg_UG")
++        encodingStr = "ISO-8859-10";
++    if (lcs=="lt_LT" || lcs=="lv_LV" || lcs=="mi_NZ")
++        encodingStr = "ISO-8859-13";
++    if (lcs == "cy_GB")
++        encodingStr = "ISO-8859-14";
++    if (lcs == "th_TH")
++        encodingStr = "TIS-620";
++    if (lcs == "tg_TJ")
++        encodingStr = "KOI8-T"; // NOT SUPPORT
++    if (lcs=="ru_UA" || lcs=="uk_UA")
++        encodingStr = "KOI8-U";
++    if (lcs == "ru_RU")
++        encodingStr = "KOI8-R";
++    if (lcs == "kk_KZ")
++        encodingStr = "PT154"; // NOT SUPPORT
++    if (lcs=="be_BY" || lcs=="bg_BG")
++        encodingStr = "CP1251";
++    if (lcs == "ka_GE")
++        encodingStr = "GEORGIAN-PS"; // NOT SUPPORT
++    if (lcs == "vi_VN")
++        encodingStr = "TCVN5712-1"; // NOT SUPPORT
++    if (lcs == "ko_KR")
++        encodingStr = "EUC-KR";
++    if (lcs == "hy_AM")
++        encodingStr = "ARMSCII-8";
++    if (lcs == "yi_US")
++        encodingStr = "CP1255";
++    if (lcs == "zh_HK")
++        encodingStr = "BIG5-HKSCS";
++    if (lcs == "zh_TW")
++        encodingStr = "BIG5";
++    if (lcs == "zh_CN" || lcs == "zh_SG")
++        encodingStr = "GB2312";
++
++    return encodingStr;
++
++#if 0
++    // WAITING FOR CHOOSING THE MOST USING ENCODING OF FOLLOWINGS:
++    if (lcs == "mk_MK" || lcs =="ru_RU")
++        encodingStr = "ISO-8859-5";
++    if (lcs == "ru_RU.koi8r")
++        encodingStr = "KOI8-R";
++    if (lcs == "zh_HK")
++        encodingStr = "BIG5-HKSCS";
++    if (lcs == "zh_TW")
++        encodingStr = "BIG5";
++    if (lcs == "zh_CN" || lcs == "zh_SG")
++        encodingStr = "GB2312";
++    if (lcs == "zh_CN.gbk" || lcs=="zh_SG.gbk")
++        encodingStr = "GBK";
++    if (lcs == "zh_TW.euctw")
++        encodingStr = "EUC-TW";
++    if (lcs == "zh_CN.gb18030")
++        encodingStr = "GB18030";
++    if (lcs == "ja_JP.sjis")
++        encodingStr = "SHIFT_JIS";
++    if (lcs == "ja_JP.shiftjisx0213")
++        encodingStr = "SHIFT_JISX0213";
++    if (lcs == "ja_JP.eucjp")
++        encodingStr = "EUC-JP";
++#endif
++}
++
++static QString unicodeMetaString(const QString &metaStr)
++{
++    QString result = metaStr;
++    if ( metaStr.isEmpty() )
++        return metaStr;
++
++    if ( detectedEncodingStr == "NOTINIT" )
++        detectedEncodingStr = getEncodingForBaseLocale( QString(QTextCodec::locale()).section('.', 0, 0) );
++    if ( detectedEncodingStr.isEmpty() )
++        return result;
++
++    QTextCodec *codec = QTextCodec::codecForName( detectedEncodingStr.latin1() );
++    if ( codec && !codec->canEncode( result ) ) {
++        result = codec->toUnicode( result.latin1() );
++        return result;
++    }
++    return result;
++}
