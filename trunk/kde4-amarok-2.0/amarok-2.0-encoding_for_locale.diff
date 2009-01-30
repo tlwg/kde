@@ -321,3 +321,196 @@ diff -Nur amarok-2.0.orig//src/meta/file/File_p.h amarok-2.0/src/meta/file/File_
      if( !disc.isEmpty() )
      {
          int i = disc.indexOf( '/' );
+diff -Nur amarok-2.0.1.1.orig/src/collectionscanner/CollectionScanner.cpp amarok-2.0.1.1/src/collectionscanner/CollectionScanner.cpp
+--- amarok-2.0.1.1.orig/src/collectionscanner/CollectionScanner.cpp	2009-01-06 19:49:11.000000000 +0700
++++ amarok-2.0.1.1/src/collectionscanner/CollectionScanner.cpp	2009-01-30 21:59:14.000000000 +0700
+@@ -35,6 +35,7 @@
+ #include <QDir>
+ #include <QDomDocument>
+ #include <QFile>
++#include <QLocale>
+ #include <QTextCodec>
+ #include <QTextStream>
+ #include <QTimer>
+@@ -68,6 +69,11 @@
+ #include <uniquefileidentifierframe.h>
+ #include <xiphcomment.h>
+ 
++QString getEncodingForBaseLocale(const QString &lcs);
++QString unicodeMetaString(const QString &metaStr);
++
++static QString detectedEncodingStr = "NOTINIT";
++
+ CollectionScanner::CollectionScanner( const QStringList& folders,
+                                       const QString& amarokPid,
+                                       const QString& collectionId,
+@@ -531,6 +537,14 @@
+             }
+             else if ( file->ID3v1Tag() )
+             {
++                if ( /* Mozilla's detector would not work correctly then lets guess from locale encoding instead */
++                    attributes["title"]    != unicodeMetaString( attributes["title"] )   ||
++                    attributes["artist"]   != unicodeMetaString( attributes["artist"] )  ||
++                    attributes["album"]    != unicodeMetaString( attributes["album"] )   ||
++                    attributes["comment"]  != unicodeMetaString( attributes["comment"] )
++                   )
++                    goto bypass;
++
+                 TagLib::String metaData = tag->title() + tag->artist() + tag->album() + tag->comment();
+                 const char* buf = metaData.toCString();
+                 size_t len = strlen( buf );
+@@ -628,6 +642,22 @@
+             }
+         }
+ 
++bypass:
++        /* Convert to Unicode because the Mozilla's detector should not work correctly */
++        QString cnvString;
++        if ( attributes["title"]    != (cnvString = unicodeMetaString( attributes["title"] )) )
++            attributes["title"]      = cnvString;
++        if ( attributes["artist"]   != (cnvString = unicodeMetaString( attributes["artist"] )) )
++            attributes["artist"]     = cnvString;
++        if ( attributes["album"]     != (cnvString = unicodeMetaString( attributes["album"] )) )
++            attributes["album"]      = cnvString;
++        if ( attributes["comment"]  != (cnvString = unicodeMetaString( attributes["comment"] )) )
++            attributes["comment"]    = cnvString;
++        if ( attributes["composer"] != (cnvString = unicodeMetaString( attributes["composer"] )) )
++            attributes["composer"]   = cnvString;
++        if ( attributes["genre"]    != (cnvString = unicodeMetaString( attributes["genre"] )) )
++            attributes["genre"]      = cnvString;
++
+         if ( !disc.isEmpty() )
+         {
+             int i = disc.indexOf('/');
+@@ -724,5 +754,131 @@
+     std::cout << text.toUtf8().data() << std::endl;
+ }
+ 
++/*
++ * alternative encoding stuff
++ */
++QString getEncodingForBaseLocale(const QString &lcs)
++{
++    QString encodingStr = "";
++    QString lang = lcs.section( '_', 0, 0 );
++    QString atTail = lcs.section( '@', 1, 1 );
++
++    if (lcs.isEmpty())
++        return encodingStr;
++
++    if ( (atTail.isEmpty() &&
++         (lang=="de" || lang=="en" || lang=="es" || lcs=="br_FR" || lcs=="ca_ES")) ||
++         lcs=="aa_DJ" || lcs=="af_ZA" || lcs=="da_DK" || lang=="fi" || lang=="fo" ||
++         lang=="fr" || lang=="ga" || lang=="gl" || lcs=="gv_GB" || lang=="id" ||
++         lang=="is" || lang=="it" || lang=="kl" || lang=="kw" || lang=="ms" || lang=="nb" ||
++         lang=="nl" || lang=="nn" || lang=="no" || lang=="oc" || lcs=="om_KE" || lang=="pt" ||
++         lang=="so" || lang=="sq" || lang=="st" || lang=="sv" || lang=="tl" || lang=="uz" ||
++         lang=="wa" || lang=="xh" || lang=="zu"
++       )
++        encodingStr = "ISO-8859-1";
++    else if (lcs=="an_ES" || lcs=="ast_ES" || lcs=="ca_AD" || lcs=="ca_FR" || lcs=="ca_IT" ||
++             lcs=="gd_GB" || lcs=="mg_MG")
++        encodingStr = "ISO-8859-15";
++    else if (!atTail.isEmpty() && atTail.toLower()=="euro")
++        encodingStr = "ISO-8859-15";
++
++    if (lcs=="bs_BA" || lcs=="cs_CZ" || lcs=="hr_HR" || lcs=="hsb_DE" || lcs=="hu_HU" ||
++        lcs=="pl_PL" || lcs=="ro_RO" || lcs=="sh_YU" || lcs=="sk_SK" || lcs=="sl_SI")
++        encodingStr = "ISO-8859-2";
++    if (lcs == "mt_MT")
++        encodingStr = "ISO-8859-3";
++    if (lcs == "mk_MK")
++        encodingStr = "ISO-8859-5";
++    if (lang == "ar")
++        encodingStr = "ISO-8859-6";
++    if (lcs=="el_CY" || lcs=="el_GR")
++        encodingStr = "ISO-8859-7";
++    if (lcs=="he_IL" || lcs=="iw_IL")
++        encodingStr = "ISO-8859-8";
++    if (lcs=="ku_TR" || lcs=="tr_CY" || lcs=="tr_TR")
++        encodingStr = "ISO-8859-9";
++    if (lcs == "lg_UG")
++        encodingStr = "ISO-8859-10";
++    if (lcs=="lt_LT" || lcs=="lv_LV" || lcs=="mi_NZ")
++        encodingStr = "ISO-8859-13";
++    if (lcs == "cy_GB")
++        encodingStr = "ISO-8859-14";
++    if (lcs == "th_TH")
++        encodingStr = "TIS-620";
++    if (lcs == "tg_TJ")
++        encodingStr = "KOI8-T"; // NOT SUPPORT
++    if (lcs=="ru_UA" || lcs=="uk_UA")
++        encodingStr = "KOI8-U";
++    if (lcs == "ru_RU")
++        encodingStr = "KOI8-R";
++    if (lcs == "kk_KZ")
++        encodingStr = "PT154"; // NOT SUPPORT
++    if (lcs=="be_BY" || lcs=="bg_BG")
++        encodingStr = "CP1251";
++    if (lcs == "ka_GE")
++        encodingStr = "GEORGIAN-PS"; // NOT SUPPORT
++    if (lcs == "vi_VN")
++        encodingStr = "TCVN5712-1"; // NOT SUPPORT
++    if (lcs == "ko_KR")
++        encodingStr = "EUC-KR";
++    if (lcs == "hy_AM")
++        encodingStr = "ARMSCII-8";
++    if (lcs == "yi_US")
++        encodingStr = "CP1255";
++    if (lcs == "zh_HK")
++        encodingStr = "BIG5-HKSCS";
++    if (lcs == "zh_TW")
++        encodingStr = "BIG5";
++    if (lcs == "zh_CN" || lcs == "zh_SG")
++        encodingStr = "GB2312";
++
++    return encodingStr;
++
++#if 0
++    // WAITING FOR CHOOSING THE MOST USING ENCODING OF FOLLOWINGS:
++    if (lcs == "mk_MK" || lcs =="ru_RU")
++        encodingStr = "ISO-8859-5";
++    if (lcs == "ru_RU.koi8r")
++        encodingStr = "KOI8-R";
++    if (lcs == "zh_HK")
++        encodingStr = "BIG5-HKSCS";
++    if (lcs == "zh_TW")
++        encodingStr = "BIG5";
++    if (lcs == "zh_CN" || lcs == "zh_SG")
++        encodingStr = "GB2312";
++    if (lcs == "zh_CN.gbk" || lcs=="zh_SG.gbk")
++        encodingStr = "GBK";
++    if (lcs == "zh_TW.euctw")
++        encodingStr = "EUC-TW";
++    if (lcs == "zh_CN.gb18030")
++        encodingStr = "GB18030";
++    if (lcs == "ja_JP.sjis")
++        encodingStr = "SHIFT_JIS";
++    if (lcs == "ja_JP.shiftjisx0213")
++        encodingStr = "SHIFT_JISX0213";
++    if (lcs == "ja_JP.eucjp")
++        encodingStr = "EUC-JP";
++#endif
++}
++
++QString unicodeMetaString(const QString &metaStr)
++{
++    QString result = metaStr;
++    if ( metaStr.isEmpty() )
++        return metaStr;
++
++    if ( detectedEncodingStr == "NOTINIT" )
++        detectedEncodingStr = getEncodingForBaseLocale( QLocale::system().name().section('.', 0, 0) );
++    if ( detectedEncodingStr.isEmpty() )
++        return result;
++
++    QTextCodec *codec = QTextCodec::codecForName( detectedEncodingStr.toLatin1() );
++    if ( codec && !codec->canEncode( result ) ) {
++        result = codec->toUnicode( result.toLatin1() );
++        return result;
++    }
++    return result;
++}
++
+ #include "CollectionScanner.moc"
+ 
