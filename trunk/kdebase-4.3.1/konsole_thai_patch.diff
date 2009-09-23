@@ -1,0 +1,137 @@
+diff -ur kdebase-4.3.1.org/apps/konsole/src/Screen.cpp kdebase-4.3.1/apps/konsole/src/Screen.cpp
+--- kdebase-4.3.1.org/apps/konsole/src/Screen.cpp	2009-03-27 21:46:28.000000000 +0700
++++ kdebase-4.3.1/apps/konsole/src/Screen.cpp	2009-09-23 14:41:09.000000000 +0700
+@@ -630,6 +630,47 @@
+     // putting the cursor one right to the last column of the screen.
+ 
+     int w = konsole_wcwidth(c);
++
++    // force combining character at column 0 to always take the first cell
++    if (w == 0 && cuX == 0 && QChar::category(c) == QChar::Mark_NonSpacing)
++          w = 1;
++
++    // Character sequence to store combining characters
++    // Maximum 5 characters in one cell (OK for Thai and any other languages that we know of)
++    const int MAX_COMBINING_CHARS = 5;
++    ushort u_char_combind[MAX_COMBINING_CHARS];
++
++    if (w == 0 && cuX > 0 && QChar::category(c) == QChar::Mark_NonSpacing) {
++        if (screenLines[cuY][cuX-1].rendition & RE_EXTENDED_CHAR)
++        {
++            // the previous character is already stored in a chareacter sequence
++            // append to this if not yet exceeding the limit
++            ushort extendedCharLength = 0;
++            ushort* chars = ExtendedCharTable::instance.lookupExtendedChar(screenLines[cuY][cuX-1].charSequence,extendedCharLength);
++
++            if (extendedCharLength > MAX_COMBINING_CHARS)
++                return; 
++
++            for ( int index = 0 ; index < extendedCharLength ; index++ )            
++                u_char_combind[index] = chars[index];
++
++            u_char_combind[extendedCharLength] = c;
++            Character& th_char = screenLines[cuY][cuX-1];
++            th_char.charSequence = ExtendedCharTable::instance.createExtendedChar(u_char_combind, extendedCharLength+1);
++        }
++        else
++        {
++            // put in a new chareacter sequence
++            Character& th_char = screenLines[cuY][cuX-1];
++
++            th_char.rendition |= RE_EXTENDED_CHAR;
++            u_char_combind[0] = (ushort)screenLines[cuY][cuX-1].character;
++            u_char_combind[1] = c;        
++            th_char.charSequence = ExtendedCharTable::instance.createExtendedChar(u_char_combind, 2); 
++        }
++        return;            
++    }
++
+     if (w <= 0)
+         return;
+ 
+diff -ur kdebase-4.3.1.org/apps/konsole/src/TerminalCharacterDecoder.cpp kdebase-4.3.1/apps/konsole/src/TerminalCharacterDecoder.cpp
+--- kdebase-4.3.1.org/apps/konsole/src/TerminalCharacterDecoder.cpp	2008-09-26 21:55:51.000000000 +0700
++++ kdebase-4.3.1/apps/konsole/src/TerminalCharacterDecoder.cpp	2009-09-23 14:25:35.000000000 +0700
+@@ -102,8 +102,20 @@
+     
+     for (int i=0;i<outputCount;)
+     {
++      // in case of combining character (character sequence), decode it first
++      if (characters[i].rendition & RE_EXTENDED_CHAR)
++      {
++        ushort extendedCharLength = 0;
++        ushort* chars = ExtendedCharTable::instance.lookupExtendedChar(characters[i].charSequence,extendedCharLength);
++
++        for (int j = 0;j<extendedCharLength;j++)
++          plainText.append(QChar(chars[j]));
++
++        i++;
++      } else {
+         plainText.append( QChar(characters[i].character) );
+         i += qMax(1,konsole_wcwidth(characters[i].character));
++      }
+     }
+     *_output << plainText;
+ }
+diff -ur kdebase-4.3.1.org/apps/konsole/src/TerminalDisplay.cpp kdebase-4.3.1/apps/konsole/src/TerminalDisplay.cpp
+--- kdebase-4.3.1.org/apps/konsole/src/TerminalDisplay.cpp	2009-05-15 00:26:16.000000000 +0700
++++ kdebase-4.3.1/apps/konsole/src/TerminalDisplay.cpp	2009-09-23 14:13:32.000000000 +0700
+@@ -1427,6 +1427,7 @@
+              _image[loc(x+len,y)].foregroundColor == currentForeground &&
+              _image[loc(x+len,y)].backgroundColor == currentBackground &&
+              _image[loc(x+len,y)].rendition == currentRendition &&
++             _image[loc(x+len,y)].rendition & ~RE_EXTENDED_CHAR &&  // Skip CharSequence, leave it to automatic font anchoring / character cell composing
+              (_image[ qMin(loc(x+len,y)+1,_imageSize) ].character == 0) == doubleWidth &&
+              isLineChar( c = _image[loc(x+len,y)].character) == lineDraw) // Assignment!
+       {
+@@ -2549,19 +2550,41 @@
+                 return font();
+             break;
+         case Qt::ImCursorPosition:
++            {
++                Character *chars = &_image[loc(0,cursorPos.y())];
++                int tmp_count = 0;
++                for (int i = 0;i < cursorPos.x();i++)
++                {
++                    if (chars[i].rendition & RE_EXTENDED_CHAR)
++                    {
++                        ushort extendedCharLength = 0;
++                        ushort* chars_t = ExtendedCharTable::instance 
++                            .lookupExtendedChar(chars[i].charSequence,extendedCharLength);
++                        tmp_count += extendedCharLength-1;
++                    }
++                }
+                 // return the cursor position within the current line
+-                return cursorPos.x();
++                return cursorPos.x() + tmp_count;
++            }
+             break;
+         case Qt::ImSurroundingText:
+-            {
++            {   
++                // Do not try to even peek screen buffer. The real text buffer
++                // owner is the process that runs on konsole, not konsole
++                // itself. Trying to do so would cause text input in remote
++                // sessions to depend on konsole's response, which can block
++                // one from typing continuously without waiting the characters
++                // to appear on screen, for instance.
++                return QString();
++
+                 // return the text from the current line
+-                QString lineText;
+-                QTextStream stream(&lineText);
+-                PlainTextDecoder decoder;
+-                decoder.begin(&stream);
+-                decoder.decodeLine(&_image[loc(0,cursorPos.y())],_usedColumns,_lineProperties[cursorPos.y()]);
+-                decoder.end();
+-                return lineText;
++//                 QString lineText;
++//                 QTextStream stream(&lineText);
++//                 PlainTextDecoder decoder;
++//                 decoder.begin(&stream);
++//                 decoder.decodeLine(&_image[loc(0,cursorPos.y())],_usedColumns,_lineProperties[cursorPos.y()]);
++//                 decoder.end();
++//                 return lineText;
+             }
+             break;
+         case Qt::ImCurrentSelection:

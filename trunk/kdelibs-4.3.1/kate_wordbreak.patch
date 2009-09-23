@@ -1,0 +1,220 @@
+diff -Nur kdelibs-4.0.98.orig/kate/document/katedocument.cpp kdelibs-4.0.98/kate/document/katedocument.cpp
+--- kdelibs-4.0.98.orig/kate/document/katedocument.cpp	2008-07-08 16:54:12.000000000 +0700
++++ kdelibs-4.0.98/kate/document/katedocument.cpp	2008-07-26 19:49:07.000000000 +0700
+@@ -1187,14 +1187,21 @@
+       // This could be a priority (setting) in the hl/filetype/document
+       int z = 0;
+       int nw = 0; // alternative position, a non word character
++#if QT_VERSION >= 0x040400
++      QTextLayout curline( l->string() );
++      z = nw = curline.previousCursorPosition( searchStart, QTextLayout::SkipWords );
++#else
+       for (z=searchStart; z > 0; z--)
+       {
+         if (t.at(z).isSpace()) break;
+         if ( ! nw && highlight()->canBreakAt( t.at(z) , l->attribute(z) ) )
+         nw = z;
+       }
+-
++#endif
+       bool removeTrailingSpace = false;
++#if QT_VERSION >= 0x040400
++      if (z == 0)
++#else
+       if (z > 0)
+       {
+         // So why don't we just remove the trailing space right away?
+@@ -1206,6 +1213,7 @@
+         removeTrailingSpace = true;
+       }
+       else
++#endif
+       {
+         // There was no space to break at so break at a nonword character if
+         // found, or at the wrapcolumn ( that needs be configurable )
+diff -Nur kdelibs-4.0.98.orig/kate/view/kateview.cpp kdelibs-4.0.98/kate/view/kateview.cpp
+--- kdelibs-4.0.98.orig/kate/view/kateview.cpp	2008-06-26 08:33:20.000000000 +0700
++++ kdelibs-4.0.98/kate/view/kateview.cpp	2008-07-26 20:41:21.000000000 +0700
+@@ -48,6 +48,10 @@
+ #include "katesearchbar.h"
+ #include "katepartpluginmanager.h"
+ 
++#if QT_VERSION >= 0x040400
++#include "katelayoutcache.h"
++#endif
++
+ #include <ktexteditor/cursorfeedback.h>
+ 
+ #include <kparts/event.h>
+@@ -1591,6 +1595,29 @@
+ 
+ void KateView::selectWord( const KTextEditor::Cursor& cursor )
+ {
++#if QT_VERSION >= 0x040400
++  int start, end;
++  const QString wordSep = (".,?!:;-<>[](){}=/\t");
++  QChar ch;
++
++  KateLineLayoutPtr curLine = m_viewInternal->cache()->line( cursor.line() );
++
++  start = cursor.column();
++
++  ch = curLine->layout()->text()[start - 1];
++  start -= wordSep.contains(ch) ? 1 : 0;
++  ch = curLine->layout()->text()[start - 1];
++  start += (ch == QLatin1Char(' ')) ? 1 : 0;
++
++  start = curLine->layout()->previousCursorPosition( start, QTextLayout::SkipWords);
++  end = curLine->layout()->nextCursorPosition( start, QTextLayout::SkipWords );
++
++  ch = curLine->layout()->text()[end - 1];
++  if ( wordSep.contains(ch) || ch == QLatin1Char(' ') )
++    --end;
++
++#else
++
+   int start, end, len;
+ 
+   KateTextLine::Ptr textLine = m_doc->plainKateTextLine(cursor.line());
+@@ -1604,6 +1631,8 @@
+   while (end < len && m_doc->highlight()->isInWord(textLine->at(end), textLine->attribute(start - 1))) end++;
+   if (end <= start) return;
+ 
++#endif
++
+   setSelection (KTextEditor::Range(cursor.line(), start, cursor.line(), end));
+ }
+ 
+diff -Nur kdelibs-4.0.98.orig/kate/view/kateviewinternal.cpp kdelibs-4.0.98/kate/view/kateviewinternal.cpp
+--- kdelibs-4.0.98.orig/kate/view/kateviewinternal.cpp	2008-06-26 08:33:20.000000000 +0700
++++ kdelibs-4.0.98/kate/view/kateviewinternal.cpp	2008-07-26 19:27:37.000000000 +0700
+@@ -745,6 +745,9 @@
+ 
+ void KateViewInternal::doDelete()
+ {
++  // If no selection then select one cell for delete cell instead of char
++  if ( !m_view->config()->persistentSelection() && !m_view->selection() )
++    cursorRight( true );
+   m_doc->del( m_view, m_cursor );
+ }
+ 
+@@ -980,6 +983,73 @@
+   virtual CalculatingCursor& operator-=( int n ) {
+     return operator+=( -n );
+   }
++
++#if QT_VERSION >= 0x040400
++  virtual CalculatingCursor& previousWordPosition () {
++    KateLineLayoutPtr thisLine = m_vi->cache()->line(line());
++    if (!thisLine->isValid()) {
++      kWarning() << "Did not retrieve a valid layout for line " << line();
++      return *this;
++    }
++
++    if (m_column == 0) {
++      // Have come to the start of the document
++      if (line() != 0) {
++
++        // Start going back to the end of the last line
++        setLine(line() - 1);
++
++        // Retrieve the next text range
++        thisLine = m_vi->cache()->line(line());
++        if (!thisLine->isValid()) {
++          kWarning() << "Did not retrieve a valid layout for line " << line();
++          return *this;
++        }
++
++        // Finish going back to the end of the last line
++        m_column = thisLine->length();
++
++      }
++    }
++
++    m_column = thisLine->layout()->previousCursorPosition(m_column, QTextLayout::SkipWords);
++
++    Q_ASSERT(valid());
++    return *this;
++  }
++
++  virtual CalculatingCursor& nextWordPosition () {
++    KateLineLayoutPtr thisLine = m_vi->cache()->line(line());
++    if (!thisLine->isValid()) {
++      kWarning() << "Did not retrieve a valid layout for line " << line();
++      return *this;
++    }
++
++    if (m_column == thisLine->length()) {
++      // Have come to the end of a line
++      if (line() < m_vi->m_doc->lines() - 1) {
++        // Not end of the document
++
++        // Advance to the beginning of the next line
++        m_column = 0;
++        setLine(line() + 1);
++
++        // Retrieve the next text range
++        thisLine = m_vi->cache()->line(line());
++        if (!thisLine->isValid()) {
++          kWarning() << "Did not retrieve a valid layout for line " << line();
++          return *this;
++        }
++
++      }
++    }
++
++    m_column = thisLine->layout()->nextCursorPosition(m_column, QTextLayout::SkipWords);
++
++    Q_ASSERT(valid());
++    return *this;
++  }
++#endif
+ };
+ 
+ void KateViewInternal::moveChar( KateViewInternal::Bias bias, bool sel )
+@@ -1025,6 +1095,13 @@
+   // and skip all preceding characters that fall into this class.
+   // The code assumes that space is never part of the word character class.
+ 
++#if QT_VERSION >= 0x040400
++
++  // Using skipWords mode of QTextLayout
++  c.previousWordPosition ();
++
++#else
++
+   KateHighlighting* h = m_doc->highlight();
+   if( !c.atEdge( left ) ) {
+ 
+@@ -1052,6 +1129,8 @@
+     }
+   }
+ 
++#endif
++
+   updateSelection( c, sel );
+   updateCursor( c );
+ }
+@@ -1068,6 +1147,13 @@
+   // If the skipped characters are followed by space, we skip that too.
+   // The code assumes that space is never part of the word character class.
+ 
++#if QT_VERSION >= 0x040400
++
++  // Using skipWords mode of QTextLayout
++  c.nextWordPosition ();
++
++#else
++
+   KateHighlighting* h = m_doc->highlight();
+   if( c.atEdge( right ) )
+   {
+@@ -1093,6 +1179,8 @@
+   while( !c.atEdge( right ) && m_doc->line( c.line() )[ c.column() ].isSpace() )
+     ++c;
+ 
++#endif
++
+   updateSelection( c, sel );
+   updateCursor( c );
+ }
